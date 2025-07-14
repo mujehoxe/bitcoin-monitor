@@ -9,7 +9,7 @@ import {
   SentimentTrend,
   TradingSignal,
 } from "@/types/sentiment";
-import { useCallback, useEffect, useState, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface UseSentimentAnalysisResult {
   news: (NewsArticle & { sentiment?: SentimentAnalysis })[];
@@ -40,7 +40,10 @@ export const useSentimentAnalysis = (
 
   // Memoize services to prevent recreation on every render
   const newsService = useMemo(() => NewsService.getInstance(), []);
-  const sentimentService = useMemo(() => SentimentAnalysisService.getInstance(), []);
+  const sentimentService = useMemo(
+    () => SentimentAnalysisService.getInstance(),
+    []
+  );
 
   // Stabilize priceHistory to prevent infinite loops
   const stablePriceHistory = useMemo(() => {
@@ -137,7 +140,11 @@ export const useSentimentAnalysis = (
 
   // Initial analysis - only run once when currentPrice becomes available
   useEffect(() => {
-    if (currentPrice > 0 && !isAnalyzing.current && analyzeSentimentRef.current) {
+    if (
+      currentPrice > 0 &&
+      !isAnalyzing.current &&
+      analyzeSentimentRef.current
+    ) {
       analyzeSentimentRef.current();
     }
   }, [currentPrice]); // Safe to exclude analyzeSentiment since we use ref
@@ -145,9 +152,13 @@ export const useSentimentAnalysis = (
   // Periodic refresh every 10 minutes (instead of 5)
   useEffect(() => {
     if (currentPrice <= 0) return;
-    
+
     const interval = setInterval(() => {
-      if (currentPrice > 0 && !isAnalyzing.current && analyzeSentimentRef.current) {
+      if (
+        currentPrice > 0 &&
+        !isAnalyzing.current &&
+        analyzeSentimentRef.current
+      ) {
         analyzeSentimentRef.current();
       }
     }, 10 * 60 * 1000); // 10 minutes
