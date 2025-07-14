@@ -1,7 +1,6 @@
 "use client";
 
-import NewsManager from "@/components/NewsManager";
-import SentimentDashboard from "@/components/SentimentDashboard";
+import CompactSentimentPanel from "@/components/CompactSentimentPanel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
@@ -14,7 +13,7 @@ import {
   LineSeries,
   Time,
 } from "lightweight-charts";
-import { Loader2, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface CandlestickData {
@@ -41,7 +40,13 @@ interface TickerData {
   volume24h: string;
 }
 
-const BitcoinPriceChart: React.FC = () => {
+interface BitcoinPriceChartProps {
+  onDataUpdate?: (currentPrice: number, priceHistory: number[]) => void;
+}
+
+const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
+  onDataUpdate,
+}) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
@@ -64,6 +69,7 @@ const BitcoinPriceChart: React.FC = () => {
   const [isChartInitialized, setIsChartInitialized] = useState(false);
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
   const [currentDataSource, setCurrentDataSource] = useState<string>("Unknown");
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
 
   // Get current price and price history for sentiment analysis
   const currentPrice = tickerData
@@ -73,9 +79,15 @@ const BitcoinPriceChart: React.FC = () => {
     : 0;
   const priceHistory = initialData.slice(-100).map((d) => d.close); // Last 100 prices
 
+  // Call onDataUpdate when data changes
+  React.useEffect(() => {
+    if (onDataUpdate) {
+      onDataUpdate(currentPrice, priceHistory);
+    }
+  }, [currentPrice, priceHistory, onDataUpdate]);
+
   // Sentiment analysis hook
   const {
-    news,
     sentimentTrend,
     prediction,
     tradingSignal,
@@ -927,7 +939,7 @@ const BitcoinPriceChart: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="w-full max-w-7xl mx-auto p-2">
+      <div className="w-full mx-auto p-2">
         <Card className="h-[calc(100vh-1rem)]">
           <CardContent className="p-2 h-full">
             <div className="flex items-center justify-center h-full">
@@ -946,7 +958,7 @@ const BitcoinPriceChart: React.FC = () => {
 
   if (error) {
     return (
-      <div className="w-full max-w-7xl mx-auto p-2">
+      <div className="w-full mx-auto p-2">
         <Card className="h-[calc(100vh-1rem)]">
           <CardContent className="p-2 h-full">
             <div className="flex items-center justify-center h-full">
@@ -973,110 +985,155 @@ const BitcoinPriceChart: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-2 space-y-4">
-      {/* Sentiment Analysis Dashboard */}
-      <SentimentDashboard
-        sentimentTrend={sentimentTrend}
-        tradingSignal={tradingSignal}
-        isLoading={isSentimentLoading}
-      />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Price Chart - Takes up 2/3 of the space */}
-        <div className="lg:col-span-2">
-          <Card className="h-[600px]">
+    <div className="mx-16 p-2">
+      <div className="flex gap-4 h-[calc(100vh-2rem)]">
+        {/* Price Chart - Takes up most of the space */}
+        <div className="flex-1">
+          <Card className="h-full">
             <CardContent className="p-2 h-full">
               <div className="flex gap-2 h-full">
                 {/* Stats Sidebar */}
-                <div className="w-64 space-y-2">
-                  {/* Title and Controls */}
-                  <div className="bg-muted/50 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h2 className="text-lg font-bold">Bitcoin Monitor</h2>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={refreshSentiment}
-                          disabled={isSentimentLoading}
-                          className="p-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Refresh Sentiment Analysis"
-                        >
-                          <RefreshCw
-                            className={`h-3 w-3 ${
-                              isSentimentLoading ? "animate-spin" : ""
-                            }`}
-                          />
-                        </button>
-                        <span
-                          className={`size-2 rounded-full ${
-                            isWebSocketConnected ? "bg-green-600" : "bg-red-600"
-                          }`}
-                        ></span>
-                      </div>
-                    </div>
-                    {hasMoreData && (
-                      <button
-                        onClick={loadMoreHistoricalData}
-                        disabled={isLoadingMore}
-                        className="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {isLoadingMore ? (
-                          <div className="flex items-center justify-center gap-1">
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                            Loading...
-                          </div>
-                        ) : (
-                          "Load More History"
-                        )}
-                      </button>
-                    )}
+                <div
+                  className={`transition-all duration-300 ${
+                    isLeftSidebarCollapsed ? "w-8" : "w-64"
+                  } space-y-2`}
+                >
+                  {/* Collapse/Expand Button */}
+                  <div className="flex justify-end">
+                    <button
+                      onClick={() =>
+                        setIsLeftSidebarCollapsed(!isLeftSidebarCollapsed)
+                      }
+                      className="p-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                      title={
+                        isLeftSidebarCollapsed
+                          ? "Expand Sidebar"
+                          : "Collapse Sidebar"
+                      }
+                    >
+                      {isLeftSidebarCollapsed ? (
+                        <ChevronRight className="h-3 w-3" />
+                      ) : (
+                        <ChevronLeft className="h-3 w-3" />
+                      )}
+                    </button>
                   </div>
 
-                  {/* Price Info */}
-                  {tickerData && (
-                    <div className="bg-muted/50 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-lg font-bold">
-                          {formatPrice(tickerData.price)}
-                        </span>
-                        <Badge
-                          variant={
-                            parseFloat(tickerData.priceChangePercent) >= 0
-                              ? "default"
-                              : "destructive"
-                          }
-                          className="text-xs"
-                        >
-                          {formatPercent(tickerData.priceChangePercent)}
-                        </Badge>
+                  {!isLeftSidebarCollapsed && (
+                    <>
+                      {/* Title and Controls */}
+                      <div className="bg-muted/50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h2 className="text-lg font-bold">Bitcoin Monitor</h2>
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`size-2 rounded-full ${
+                                isWebSocketConnected
+                                  ? "bg-green-600"
+                                  : "bg-red-600"
+                              }`}
+                            ></span>
+                          </div>
+                        </div>
+                        {hasMoreData && (
+                          <button
+                            onClick={loadMoreHistoricalData}
+                            disabled={isLoadingMore}
+                            className="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isLoadingMore ? (
+                              <div className="flex items-center justify-center gap-1">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                Loading...
+                              </div>
+                            ) : (
+                              "Load More History"
+                            )}
+                          </button>
+                        )}
                       </div>
-                      <div className="space-y-1 text-xs text-muted-foreground">
-                        <div>High: {formatPrice(tickerData.high24h)}</div>
-                        <div>Low: {formatPrice(tickerData.low24h)}</div>
-                        <div>
-                          Volume:{" "}
-                          {parseFloat(tickerData.volume24h).toLocaleString()}
+
+                      {/* Price Info */}
+                      {tickerData && (
+                        <div className="bg-muted/50 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-lg font-bold">
+                              {formatPrice(tickerData.price)}
+                            </span>
+                            <Badge
+                              variant={
+                                parseFloat(tickerData.priceChangePercent) >= 0
+                                  ? "default"
+                                  : "destructive"
+                              }
+                              className="text-xs"
+                            >
+                              {formatPercent(tickerData.priceChangePercent)}
+                            </Badge>
+                          </div>
+                          <div className="space-y-1 text-xs text-muted-foreground">
+                            <div>High: {formatPrice(tickerData.high24h)}</div>
+                            <div>Low: {formatPrice(tickerData.low24h)}</div>
+                            <div>
+                              Volume:{" "}
+                              {parseFloat(
+                                tickerData.volume24h
+                              ).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Data Info */}
+                      {initialData.length > 0 && (
+                        <div className="bg-muted/50 rounded-lg p-3">
+                          <div className="text-xs text-muted-foreground space-y-1">
+                            <div>Data Points: {initialData.length}</div>
+                            <div>Source: {currentDataSource}</div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sentiment Error Display */}
+                      {sentimentError && (
+                        <div className="bg-red-900/20 border border-red-500 rounded-lg p-3">
+                          <div className="text-xs text-red-400">
+                            Sentiment Error: {sentimentError}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sentiment Analysis Components */}
+                      <div className="bg-muted/50 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-sm font-bold">
+                            Sentiment Analysis
+                          </h3>
+                          <button
+                            onClick={refreshSentiment}
+                            disabled={isSentimentLoading}
+                            className="p-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh Sentiment Analysis"
+                          >
+                            <RefreshCw
+                              className={`h-3 w-3 ${
+                                isSentimentLoading ? "animate-spin" : ""
+                              }`}
+                            />
+                          </button>
+                        </div>
+
+                        {/* Compact Sentiment Analysis */}
+                        <div className="space-y-2">
+                          <CompactSentimentPanel
+                            sentimentTrend={sentimentTrend}
+                            tradingSignal={tradingSignal}
+                            prediction={prediction}
+                            isLoading={isSentimentLoading}
+                          />
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Data Info */}
-                  {initialData.length > 0 && (
-                    <div className="bg-muted/50 rounded-lg p-3">
-                      <div className="text-xs text-muted-foreground space-y-1">
-                        <div>Data Points: {initialData.length}</div>
-                        <div>Source: {currentDataSource}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Sentiment Error Display */}
-                  {sentimentError && (
-                    <div className="bg-red-900/20 border border-red-500 rounded-lg p-3">
-                      <div className="text-xs text-red-400">
-                        Sentiment Error: {sentimentError}
-                      </div>
-                    </div>
+                    </>
                   )}
                 </div>
 
@@ -1119,53 +1176,6 @@ const BitcoinPriceChart: React.FC = () => {
               </div>
             </CardContent>
           </Card>
-        </div>
-
-        {/* News and Sentiment Panel - Takes up 1/3 of the space */}
-        <div className="lg:col-span-1">
-          <div className="space-y-4">
-            <NewsManager news={news} isLoading={isSentimentLoading} />
-
-            {/* Prediction Card */}
-            {prediction && (
-              <Card>
-                <CardContent className="p-4">
-                  <h3 className="font-semibold mb-2">Market Prediction</h3>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span>Direction:</span>
-                      <Badge
-                        className={`${
-                          prediction.direction === "up"
-                            ? "bg-green-500"
-                            : prediction.direction === "down"
-                            ? "bg-red-500"
-                            : "bg-gray-500"
-                        } text-white`}
-                      >
-                        {prediction.direction.toUpperCase()}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Confidence:</span>
-                      <span>{(prediction.confidence * 100).toFixed(1)}%</span>
-                    </div>
-                    {prediction.priceTarget && (
-                      <div className="flex justify-between">
-                        <span>Target:</span>
-                        <span>
-                          {formatPrice(prediction.priceTarget.toString())}
-                        </span>
-                      </div>
-                    )}
-                    <div className="text-xs text-gray-400 mt-2">
-                      {prediction.reasoning}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
         </div>
       </div>
     </div>
