@@ -51,101 +51,91 @@ const BitcoinPriceChart: React.FC = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [earliestTimestamp, setEarliestTimestamp] = useState<number | null>(null);
-  const [loadedTimestamps, setLoadedTimestamps] = useState<Set<number>>(new Set());
+  const [hasMoreData, setHasMoreData] = useState(true);
+  const [isChartInitialized, setIsChartInitialized] = useState(false);
+  const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
+  const [currentDataSource, setCurrentDataSource] = useState<string>("Unknown");
 
-  // Fetch historical data from Bybit
-  const fetchHistoricalData = async (endTime?: number) => {
+  // Fetch historical data with multiple data sources as fallback
+  const fetchHistoricalData = async (endTime?: number, isLoadingMore = false) => {
     try {
-      console.log("Fetching historical data from Bybit...");
-      
-      // Build URL with optional endTime for pagination
-      let url = "https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=1&limit=200";
-      if (endTime) {
-        url += `&end=${endTime * 1000}`; // Convert to milliseconds
+      if (isLoadingMore) {
+        setIsLoadingMore(true);
       }
       
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      console.log("Fetching historical data...", endTime ? `before ${endTime}` : "latest");
+      
+      let klines: CandlestickData[] = [];
+      
+      // Try multiple data sources in order of preference
+      try {
+        // First try Binance (more reliable for historical data)
+        klines = await fetchFromBinance(endTime);
+        setCurrentDataSource("Binance");
+        console.log("Successfully fetched from Binance:", klines.length, "candles");
+      } catch (binanceError) {
+        console.warn("Binance failed, trying Bybit:", binanceError);
+        
+        try {
+          // Fallback to Bybit
+          klines = await fetchFromBybit(endTime);
+          setCurrentDataSource("Bybit");
+          console.log("Successfully fetched from Bybit:", klines.length, "candles");
+        } catch (bybitError) {
+          console.warn("Bybit failed, trying CoinGecko:", bybitError);
+          
+          // Fallback to CoinGecko (limited but more historical data)
+          klines = await fetchFromCoinGecko(endTime);
+          setCurrentDataSource("CoinGecko");
+          console.log("Successfully fetched from CoinGecko:", klines.length, "candles");
+        }
       }
-
-      const data = await response.json();
-      console.log("Bybit response:", data);
-
-      if (data.retCode !== 0) {
-        throw new Error(`Bybit API error: ${data.retMsg}`);
-      }
-
-      const klines = data.result.list
-        .map((item: string[]) => ({
-          time: (parseInt(item[0]) / 1000) as Time, // Convert to seconds and cast to Time
-          open: parseFloat(item[1]),
-          high: parseFloat(item[2]),
-          low: parseFloat(item[3]),
-          close: parseFloat(item[4]),
-          volume: parseFloat(item[5]),
-        }))
-        .reverse(); // Reverse to get chronological order
-
-      console.log("Processed candlestick data:", klines.length, "candles");
       
       if (klines.length > 0) {
         const firstTimestamp = klines[0].time as number;
-        setEarliestTimestamp(firstTimestamp);
         
-        if (endTime) {
+        if (isLoadingMore && endTime) {
           // If this is loading more data, prepend to existing data
           setInitialData(prevData => {
-            const combined = [...klines, ...prevData];
+            // Filter out any potential duplicates and merge
+            const existingTimestamps = new Set(prevData.map(item => item.time));
+            const newData = klines.filter((item: CandlestickData) => !existingTimestamps.has(item.time));
             
-            // Remove duplicates by time using a Map
-            const uniqueMap = new Map<number, CandlestickData>();
-            combined.forEach(item => {
-              const timestamp = item.time as number;
-              uniqueMap.set(timestamp, item);
-            });
+            const combined = [...newData, ...prevData];
+            const sortedData = combined.sort((a: CandlestickData, b: CandlestickData) => (a.time as number) - (b.time as number));
             
-            // Convert back to array and sort by time
-            const uniqueData = Array.from(uniqueMap.values())
-              .sort((a, b) => (a.time as number) - (b.time as number));
-            
-            // Update loaded timestamps
-            setLoadedTimestamps(new Set(uniqueData.map(item => item.time as number)));
-            
-            console.log("Combined data:", combined.length, "Unique data:", uniqueData.length);
-            return uniqueData;
+            console.log(`Combined data: ${newData.length} new + ${prevData.length} existing = ${sortedData.length} total`);
+            return sortedData;
           });
-          setIsLoadingMore(false);
+          
+          // Update earliest timestamp
+          setEarliestTimestamp(firstTimestamp);
+          
+          // Check if we got fewer results than requested (indicating we've reached the end)
+          if (klines.length < 100) { // Lower threshold since different APIs have different limits
+            setHasMoreData(false);
+          }
         } else {
           // If this is initial load, replace all data
-          const uniqueMap = new Map<number, CandlestickData>();
-          klines.forEach((item: CandlestickData) => {
-            const timestamp = item.time as number;
-            uniqueMap.set(timestamp, item);
-          });
-          
-          const sortedData = Array.from(uniqueMap.values())
-            .sort((a, b) => (a.time as number) - (b.time as number));
-          
-          // Update loaded timestamps
-          setLoadedTimestamps(new Set(sortedData.map(item => item.time as number)));
-          
-          console.log("Initial data:", klines.length, "Unique data:", sortedData.length);
+          const sortedData = klines.sort((a: CandlestickData, b: CandlestickData) => (a.time as number) - (b.time as number));
           setInitialData(sortedData);
+          setEarliestTimestamp(firstTimestamp);
           setIsLoading(false);
         }
       } else {
-        if (!endTime) {
+        if (!isLoadingMore) {
           setIsLoading(false);
-        } else {
-          setIsLoadingMore(false);
         }
+        setHasMoreData(false);
+      }
+      
+      if (isLoadingMore) {
+        setIsLoadingMore(false);
       }
     } catch (err) {
-      console.error("Error fetching historical data:", err);
+      console.error("Error fetching historical data from all sources:", err);
       setError(
-        `Failed to fetch historical data: ${
+        `Failed to fetch historical data from all sources: ${
           err instanceof Error ? err.message : "Unknown error"
         }`
       );
@@ -156,25 +146,20 @@ const BitcoinPriceChart: React.FC = () => {
 
   // Load more historical data when scrolling back
   const loadMoreHistoricalData = useCallback(async () => {
-    if (isLoadingMore || !earliestTimestamp) return;
-    
-    // Check if we already have data for this timestamp
-    if (loadedTimestamps.has(earliestTimestamp)) {
-      console.log("Data for timestamp", earliestTimestamp, "already loaded");
+    if (isLoadingMore || !earliestTimestamp || !hasMoreData) {
+      console.log("Skip loading more data:", { isLoadingMore, earliestTimestamp, hasMoreData });
       return;
     }
     
-    // Clear any existing timeout
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
+    try {
+      console.log("Loading more historical data before timestamp:", earliestTimestamp);
+      await fetchHistoricalData(earliestTimestamp, true);
+    } catch (error) {
+      console.error("Error in loadMoreHistoricalData:", error);
+      setError("Failed to load more historical data");
+      setIsLoadingMore(false);
     }
-    
-    // Debounce the loading request
-    loadingTimeoutRef.current = setTimeout(async () => {
-      setIsLoadingMore(true);
-      await fetchHistoricalData(earliestTimestamp);
-    }, 500); // 500ms debounce
-  }, [isLoadingMore, earliestTimestamp, loadedTimestamps]);
+  }, [isLoadingMore, earliestTimestamp, hasMoreData]);
 
   // Initialize chart
   const initializeChart = useCallback(() => {
@@ -276,16 +261,18 @@ const BitcoinPriceChart: React.FC = () => {
       // Store references
       chartRef.current = chart;
       candlestickSeriesRef.current = candlestickSeries;
+      setIsChartInitialized(true);
 
       // Add timeScale subscription to detect when user scrolls back in time
       chart.timeScale().subscribeVisibleTimeRangeChange(() => {
-        if (isDisposedRef.current) return;
+        if (isDisposedRef.current || !hasMoreData) return;
         
         const timeRange = chart.timeScale().getVisibleRange();
         if (timeRange && earliestTimestamp && !isLoadingMore) {
           // If user is close to the beginning of data, load more
           const timeDiff = (timeRange.from as number) - earliestTimestamp;
-          if (timeDiff < 1800) { // Within 30 minutes of earliest data
+          if (timeDiff < 3600) { // Within 1 hour of earliest data
+            console.log("User scrolled close to earliest data, loading more...");
             loadMoreHistoricalData();
           }
         }
@@ -321,118 +308,177 @@ const BitcoinPriceChart: React.FC = () => {
         }`
       );
     }
-  }, [initialData, earliestTimestamp, loadMoreHistoricalData, isLoadingMore]);
+  }, [initialData, earliestTimestamp, loadMoreHistoricalData, isLoadingMore, hasMoreData]);
 
-  // Connect to Bybit WebSocket
+  // Connect to WebSocket (try Binance first, fallback to Bybit)
   const connectWebSocket = useCallback(() => {
-    if (isDisposedRef.current) {
-      console.log("WebSocket connection skipped - component is disposed");
+    if (isDisposedRef.current || isWebSocketConnected) {
+      console.log("WebSocket connection skipped - component is disposed or already connected");
       return;
     }
     
-    try {
-      console.log("Connecting to Bybit WebSocket...");
+    const connectToBinance = () => {
+      try {
+        console.log("Connecting to Binance WebSocket...");
+        const ws = new WebSocket("wss://stream.binance.com:9443/ws/btcusdt@kline_1m");
 
-      // Use Bybit's public WebSocket endpoint
-      const ws = new WebSocket("wss://stream.bybit.com/v5/public/spot");
-
-      ws.onopen = () => {
-        console.log("WebSocket connected successfully");
-
-        // Subscribe to kline and ticker data
-        const subscriptions = {
-          op: "subscribe",
-          args: ["kline.1.BTCUSDT", "tickers.BTCUSDT"],
+        ws.onopen = () => {
+          console.log("Binance WebSocket connected successfully");
+          setIsWebSocketConnected(true);
         };
 
-        ws.send(JSON.stringify(subscriptions));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log("WebSocket message:", data);
-
-          if (data.topic === "kline.1.BTCUSDT" && data.data) {
-            // Handle kline updates
-            const kline = data.data[0];
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            const kline = data.k;
+            
             if (kline && candlestickSeriesRef.current && !isDisposedRef.current) {
               const candleData = {
-                time: (parseInt(kline.start) / 1000) as Time,
-                open: parseFloat(kline.open),
-                high: parseFloat(kline.high),
-                low: parseFloat(kline.low),
-                close: parseFloat(kline.close),
-                volume: parseFloat(kline.volume),
+                time: (parseInt(kline.t) / 1000) as Time,
+                open: parseFloat(kline.o),
+                high: parseFloat(kline.h),
+                low: parseFloat(kline.l),
+                close: parseFloat(kline.c),
+                volume: parseFloat(kline.v),
               };
 
-              // Get the last timestamp from current data to avoid updating with older data
               const lastDataPoint = initialData[initialData.length - 1];
               const newTimestamp = candleData.time as number;
               const lastTimestamp = lastDataPoint ? (lastDataPoint.time as number) : 0;
               
-              // Only update if the new data is newer or equal to the last timestamp
               if (newTimestamp >= lastTimestamp) {
                 try {
                   if (!isDisposedRef.current && candlestickSeriesRef.current) {
                     candlestickSeriesRef.current.update(candleData);
                   }
                 } catch (error) {
-                  console.warn("Failed to update chart with WebSocket data:", error);
-                  // If update fails, try to refresh the chart data
-                  if (!isDisposedRef.current && chartRef.current && candlestickSeriesRef.current) {
-                    try {
-                      candlestickSeriesRef.current.setData(initialData);
-                    } catch (setDataError) {
-                      console.error("Failed to set chart data:", setDataError);
-                    }
-                  }
+                  console.warn("Failed to update chart with Binance WebSocket data:", error);
                 }
               }
             }
-          } else if (data.topic === "tickers.BTCUSDT" && data.data) {
-            // Handle ticker updates
-            const ticker = data.data;
-            setTickerData({
-              symbol: ticker.symbol,
-              price: ticker.lastPrice,
-              priceChange: ticker.price24hPcnt,
-              priceChangePercent: ticker.price24hPcnt,
-              high24h: ticker.highPrice24h,
-              low24h: ticker.lowPrice24h,
-              volume24h: ticker.volume24h,
-            });
+          } catch (err) {
+            console.error("Error parsing Binance WebSocket message:", err);
           }
-        } catch (err) {
-          console.error("Error parsing WebSocket message:", err);
-        }
-      };
+        };
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setError("WebSocket connection failed");
-      };
+        ws.onerror = (error) => {
+          console.error("Binance WebSocket error:", error);
+          setIsWebSocketConnected(false);
+          // Try Bybit as fallback
+          setTimeout(() => {
+            if (!isDisposedRef.current) {
+              connectToBybit();
+            }
+          }, 2000);
+        };
 
-      ws.onclose = (event) => {
-        console.log("WebSocket disconnected:", event.code, event.reason);
-        // Attempt to reconnect after 5 seconds
-        setTimeout(() => {
-          if (wsRef.current?.readyState === WebSocket.CLOSED) {
-            connectWebSocket();
+        ws.onclose = (event) => {
+          console.log("Binance WebSocket disconnected:", event.code, event.reason);
+          setIsWebSocketConnected(false);
+          setTimeout(() => {
+            if (!isDisposedRef.current && wsRef.current?.readyState === WebSocket.CLOSED) {
+              connectToBinance();
+            }
+          }, 5000);
+        };
+
+        wsRef.current = ws;
+      } catch (err) {
+        console.error("Error connecting to Binance WebSocket:", err);
+        connectToBybit();
+      }
+    };
+
+    const connectToBybit = () => {
+      try {
+        console.log("Connecting to Bybit WebSocket...");
+        const ws = new WebSocket("wss://stream.bybit.com/v5/public/spot");
+
+        ws.onopen = () => {
+          console.log("Bybit WebSocket connected successfully");
+          setIsWebSocketConnected(true);
+
+          const subscriptions = {
+            op: "subscribe",
+            args: ["kline.1.BTCUSDT", "tickers.BTCUSDT"],
+          };
+          ws.send(JSON.stringify(subscriptions));
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.topic === "kline.1.BTCUSDT" && data.data) {
+              const kline = data.data[0];
+              if (kline && candlestickSeriesRef.current && !isDisposedRef.current) {
+                const candleData = {
+                  time: (parseInt(kline.start) / 1000) as Time,
+                  open: parseFloat(kline.open),
+                  high: parseFloat(kline.high),
+                  low: parseFloat(kline.low),
+                  close: parseFloat(kline.close),
+                  volume: parseFloat(kline.volume),
+                };
+
+                const lastDataPoint = initialData[initialData.length - 1];
+                const newTimestamp = candleData.time as number;
+                const lastTimestamp = lastDataPoint ? (lastDataPoint.time as number) : 0;
+                
+                if (newTimestamp >= lastTimestamp) {
+                  try {
+                    if (!isDisposedRef.current && candlestickSeriesRef.current) {
+                      candlestickSeriesRef.current.update(candleData);
+                    }
+                  } catch (error) {
+                    console.warn("Failed to update chart with Bybit WebSocket data:", error);
+                  }
+                }
+              }
+            } else if (data.topic === "tickers.BTCUSDT" && data.data) {
+              const ticker = data.data;
+              setTickerData({
+                symbol: ticker.symbol,
+                price: ticker.lastPrice,
+                priceChange: ticker.price24hPcnt,
+                priceChangePercent: ticker.price24hPcnt,
+                high24h: ticker.highPrice24h,
+                low24h: ticker.lowPrice24h,
+                volume24h: ticker.volume24h,
+              });
+            }
+          } catch (err) {
+            console.error("Error parsing Bybit WebSocket message:", err);
           }
-        }, 5000);
-      };
+        };
 
-      wsRef.current = ws;
-    } catch (err) {
-      console.error("Error connecting to WebSocket:", err);
-      setError(
-        `WebSocket connection failed: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`
-      );
-    }
-  }, [initialData]);
+        ws.onerror = (error) => {
+          console.error("Bybit WebSocket error:", error);
+          setError("WebSocket connection failed");
+          setIsWebSocketConnected(false);
+        };
+
+        ws.onclose = (event) => {
+          console.log("Bybit WebSocket disconnected:", event.code, event.reason);
+          setIsWebSocketConnected(false);
+          setTimeout(() => {
+            if (!isDisposedRef.current && wsRef.current?.readyState === WebSocket.CLOSED) {
+              connectToBybit();
+            }
+          }, 5000);
+        };
+
+        wsRef.current = ws;
+      } catch (err) {
+        console.error("Error connecting to Bybit WebSocket:", err);
+        setError(`WebSocket connection failed: ${err instanceof Error ? err.message : "Unknown error"}`);
+        setIsWebSocketConnected(false);
+      }
+    };
+
+    // Start with Binance
+    connectToBinance();
+  }, [initialData, isWebSocketConnected]);
 
   // Cleanup
   // Cleanup on unmount
@@ -464,21 +510,39 @@ const BitcoinPriceChart: React.FC = () => {
           console.error('Error disposing chart:', error);
         }
       }
+      
+      setIsChartInitialized(false);
+      setIsWebSocketConnected(false);
     };
   }, []);
 
   // Fetch initial data
   useEffect(() => {
     fetchHistoricalData();
+    fetchTickerData();
   }, []);
 
-  // Initialize chart when data is ready
+  // Initialize chart when data is ready (but only once)
   useEffect(() => {
-    if (initialData.length > 0) {
+    if (initialData.length > 0 && !isChartInitialized) {
       initializeChart();
+    } else if (initialData.length > 0 && isChartInitialized && candlestickSeriesRef.current) {
+      // Just update the data without reinitializing
+      try {
+        candlestickSeriesRef.current.setData(initialData);
+      } catch (error) {
+        console.error("Failed to update chart data:", error);
+        setError("Failed to update chart data");
+      }
+    }
+  }, [initialData, initializeChart, isChartInitialized]);
+
+  // Connect to WebSocket (separate from chart initialization)
+  useEffect(() => {
+    if (initialData.length > 0 && !isWebSocketConnected) {
       connectWebSocket();
     }
-  }, [initialData, initializeChart, connectWebSocket]);
+  }, [initialData, connectWebSocket, isWebSocketConnected]);
 
   const formatPrice = (price: string | number) => {
     return new Intl.NumberFormat("en-US", {
@@ -492,6 +556,111 @@ const BitcoinPriceChart: React.FC = () => {
   const formatPercent = (percent: string | number) => {
     const value = typeof percent === "string" ? parseFloat(percent) : percent;
     return `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
+  };
+
+  // Fetch from Binance API
+  const fetchFromBinance = async (endTime?: number): Promise<CandlestickData[]> => {
+    let url = "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=1000";
+    if (endTime) {
+      url += `&endTime=${endTime * 1000}`; // Convert to milliseconds
+    }
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Binance API error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.map((item: any[]) => ({
+      time: (parseInt(item[0]) / 1000) as Time,
+      open: parseFloat(item[1]),
+      high: parseFloat(item[2]),
+      low: parseFloat(item[3]),
+      close: parseFloat(item[4]),
+      volume: parseFloat(item[5]),
+    }));
+  };
+
+  // Fetch from Bybit API (original implementation)
+  const fetchFromBybit = async (endTime?: number): Promise<CandlestickData[]> => {
+    let url = "https://api.bybit.com/v5/market/kline?category=spot&symbol=BTCUSDT&interval=1&limit=200";
+    if (endTime) {
+      url += `&end=${endTime * 1000}`;
+    }
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Bybit API error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    if (data.retCode !== 0) {
+      throw new Error(`Bybit API error: ${data.retMsg}`);
+    }
+    
+    return data.result.list
+      .map((item: string[]) => ({
+        time: (parseInt(item[0]) / 1000) as Time,
+        open: parseFloat(item[1]),
+        high: parseFloat(item[2]),
+        low: parseFloat(item[3]),
+        close: parseFloat(item[4]),
+        volume: parseFloat(item[5]),
+      }))
+      .reverse();
+  };
+
+  // Fetch from CoinGecko API (for extended historical data)
+  const fetchFromCoinGecko = async (endTime?: number): Promise<CandlestickData[]> => {
+    // CoinGecko has different API structure, we'll use their OHLC endpoint
+    const days = endTime ? Math.min(90, Math.floor((Date.now() / 1000 - endTime) / 86400) + 1) : 1;
+    const url = `https://api.coingecko.com/api/v3/coins/bitcoin/ohlc?vs_currency=usd&days=${days}`;
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`CoinGecko API error! status: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // CoinGecko returns [timestamp, open, high, low, close] in milliseconds
+    let ohlcData = data.map((item: number[]) => ({
+      time: (item[0] / 1000) as Time,
+      open: item[1],
+      high: item[2],
+      low: item[3],
+      close: item[4],
+      volume: 0, // CoinGecko OHLC doesn't include volume
+    }));
+    
+    // Filter data based on endTime if provided
+    if (endTime) {
+      ohlcData = ohlcData.filter((item: CandlestickData) => (item.time as number) < endTime);
+    }
+    
+    // Sort by time to ensure chronological order
+    return ohlcData.sort((a: CandlestickData, b: CandlestickData) => (a.time as number) - (b.time as number));
+  };
+
+  // Fetch ticker data from Binance
+  const fetchTickerData = async () => {
+    try {
+      const response = await fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT");
+      if (response.ok) {
+        const ticker = await response.json();
+        setTickerData({
+          symbol: ticker.symbol,
+          price: ticker.lastPrice,
+          priceChange: ticker.priceChange,
+          priceChangePercent: (parseFloat(ticker.priceChangePercent) / 100).toString(),
+          high24h: ticker.highPrice,
+          low24h: ticker.lowPrice,
+          volume24h: ticker.volume,
+        });
+      }
+    } catch (error) {
+      console.warn("Failed to fetch ticker data from Binance:", error);
+    }
   };
 
   if (isLoading) {
@@ -525,6 +694,8 @@ const BitcoinPriceChart: React.FC = () => {
                 onClick={() => {
                   setError(null);
                   setIsLoading(true);
+                  setIsChartInitialized(false);
+                  setIsWebSocketConnected(false);
                   fetchHistoricalData();
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -576,10 +747,40 @@ const BitcoinPriceChart: React.FC = () => {
       {/* Chart Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Bitcoin Price Chart</CardTitle>
-          <CardDescription>
-            Real-time BTCUSDT candlestick chart powered by Bybit
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Bitcoin Price Chart</CardTitle>
+              <CardDescription>
+                Real-time BTCUSDT candlestick chart with multiple data sources
+                {initialData.length > 0 && (
+                  <span className="ml-2 text-xs">
+                    ({initialData.length} data points from {currentDataSource})
+                  </span>
+                )}
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              {hasMoreData && (
+                <button
+                  onClick={loadMoreHistoricalData}
+                  disabled={isLoadingMore}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoadingMore ? "Loading..." : "Load More History"}
+                </button>
+              )}
+              <div className="flex items-center gap-2 text-xs">
+                <span className={`px-2 py-1 rounded text-white ${isWebSocketConnected ? 'bg-green-600' : 'bg-red-600'}`}>
+                  {isWebSocketConnected ? "Live" : "Offline"}
+                </span>
+                {currentDataSource !== "Unknown" && (
+                  <span className="px-2 py-1 rounded bg-blue-600 text-white">
+                    {currentDataSource}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="relative">
@@ -592,6 +793,11 @@ const BitcoinPriceChart: React.FC = () => {
               ref={chartContainerRef}
               className="w-full h-96 border border-slate-700 rounded"
             />
+            {!hasMoreData && (
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                All available historical data has been loaded
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
