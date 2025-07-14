@@ -1,9 +1,22 @@
-'use client';
+"use client";
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { createChart, ColorType, IChartApi, ISeriesApi, CandlestickSeries, Time } from 'lightweight-charts';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  CandlestickSeries,
+  ColorType,
+  createChart,
+  IChartApi,
+  ISeriesApi,
+  Time,
+} from "lightweight-charts";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface CandlestickData {
   time: Time;
@@ -360,9 +373,6 @@ const BitcoinPriceChart: React.FC = () => {
       <Card>
         <CardHeader>
           <CardTitle>Bitcoin Price Chart</CardTitle>
-          <CardDescription>
-            Real-time BTCUSDT candlestick chart powered by Bybit
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div
