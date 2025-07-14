@@ -735,6 +735,20 @@ const BitcoinPriceChart: React.FC = () => {
       // Just update the data without reinitializing
       try {
         candlestickSeriesRef.current.setData(initialData);
+        
+        // Update moving averages when data changes
+        if (ma7SeriesRef.current) {
+          const ma7Data = calculateMovingAverage(initialData, 7);
+          ma7SeriesRef.current.setData(ma7Data);
+        }
+        if (ma25SeriesRef.current) {
+          const ma25Data = calculateMovingAverage(initialData, 25);
+          ma25SeriesRef.current.setData(ma25Data);
+        }
+        if (ma99SeriesRef.current) {
+          const ma99Data = calculateMovingAverage(initialData, 99);
+          ma99SeriesRef.current.setData(ma99Data);
+        }
       } catch (error) {
         console.error("Failed to update chart data:", error);
         setError("Failed to update chart data");
