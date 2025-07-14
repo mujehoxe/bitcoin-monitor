@@ -1,7 +1,10 @@
 "use client";
 
+import NewsManager from "@/components/NewsManager";
+import SentimentDashboard from "@/components/SentimentDashboard";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
 import {
   CandlestickSeries,
   ColorType,
@@ -11,7 +14,7 @@ import {
   LineSeries,
   Time,
 } from "lightweight-charts";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 interface CandlestickData {
@@ -61,6 +64,25 @@ const BitcoinPriceChart: React.FC = () => {
   const [isChartInitialized, setIsChartInitialized] = useState(false);
   const [isWebSocketConnected, setIsWebSocketConnected] = useState(false);
   const [currentDataSource, setCurrentDataSource] = useState<string>("Unknown");
+
+  // Get current price and price history for sentiment analysis
+  const currentPrice = tickerData
+    ? parseFloat(tickerData.price)
+    : initialData.length > 0
+    ? initialData[initialData.length - 1].close
+    : 0;
+  const priceHistory = initialData.slice(-100).map((d) => d.close); // Last 100 prices
+
+  // Sentiment analysis hook
+  const {
+    news,
+    sentimentTrend,
+    prediction,
+    tradingSignal,
+    isLoading: isSentimentLoading,
+    error: sentimentError,
+    refreshSentiment,
+  } = useSentimentAnalysis(currentPrice, priceHistory);
 
   // Fetch historical data with multiple data sources as fallback
   const fetchHistoricalData = async (
@@ -735,7 +757,7 @@ const BitcoinPriceChart: React.FC = () => {
       // Just update the data without reinitializing
       try {
         candlestickSeriesRef.current.setData(initialData);
-        
+
         // Update moving averages when data changes
         if (ma7SeriesRef.current) {
           const ma7Data = calculateMovingAverage(initialData, 7);
@@ -951,121 +973,201 @@ const BitcoinPriceChart: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto p-2">
-      <Card className="h-[calc(100vh-1rem)]">
-        <CardContent className="p-2 h-full">
-          <div className="flex gap-2 h-full">
-            {/* Stats Sidebar */}
-            <div className="w-64 space-y-2">
-              {/* Title and Controls */}
-              <div className="bg-muted/50 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-lg font-bold">Bitcoin Monitor</h2>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`size-2 rounded-full ${
-                        isWebSocketConnected ? "bg-green-600" : "bg-red-600"
-                      }`}
-                    ></span>
-                  </div>
-                </div>
-                {hasMoreData && (
-                  <button
-                    onClick={loadMoreHistoricalData}
-                    disabled={isLoadingMore}
-                    className="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isLoadingMore ? (
-                      <div className="flex items-center justify-center gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Loading...
-                      </div>
-                    ) : (
-                      "Load More History"
-                    )}
-                  </button>
-                )}
-              </div>
+    <div className="w-full max-w-7xl mx-auto p-2 space-y-4">
+      {/* Sentiment Analysis Dashboard */}
+      <SentimentDashboard
+        sentimentTrend={sentimentTrend}
+        tradingSignal={tradingSignal}
+        isLoading={isSentimentLoading}
+      />
 
-              {/* Price Info */}
-              {tickerData && (
-                <div className="bg-muted/50 rounded-lg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-lg font-bold">
-                      {formatPrice(tickerData.price)}
-                    </span>
-                    <Badge
-                      variant={
-                        parseFloat(tickerData.priceChangePercent) >= 0
-                          ? "default"
-                          : "destructive"
-                      }
-                      className="text-xs"
-                    >
-                      {formatPercent(tickerData.priceChangePercent)}
-                    </Badge>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Price Chart - Takes up 2/3 of the space */}
+        <div className="lg:col-span-2">
+          <Card className="h-[600px]">
+            <CardContent className="p-2 h-full">
+              <div className="flex gap-2 h-full">
+                {/* Stats Sidebar */}
+                <div className="w-64 space-y-2">
+                  {/* Title and Controls */}
+                  <div className="bg-muted/50 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-lg font-bold">Bitcoin Monitor</h2>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={refreshSentiment}
+                          disabled={isSentimentLoading}
+                          className="p-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Refresh Sentiment Analysis"
+                        >
+                          <RefreshCw
+                            className={`h-3 w-3 ${
+                              isSentimentLoading ? "animate-spin" : ""
+                            }`}
+                          />
+                        </button>
+                        <span
+                          className={`size-2 rounded-full ${
+                            isWebSocketConnected ? "bg-green-600" : "bg-red-600"
+                          }`}
+                        ></span>
+                      </div>
+                    </div>
+                    {hasMoreData && (
+                      <button
+                        onClick={loadMoreHistoricalData}
+                        disabled={isLoadingMore}
+                        className="w-full px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isLoadingMore ? (
+                          <div className="flex items-center justify-center gap-1">
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                            Loading...
+                          </div>
+                        ) : (
+                          "Load More History"
+                        )}
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-1 text-xs text-muted-foreground">
-                    <div>High: {formatPrice(tickerData.high24h)}</div>
-                    <div>Low: {formatPrice(tickerData.low24h)}</div>
-                    <div>
-                      Volume:{" "}
-                      {parseFloat(tickerData.volume24h).toLocaleString()}
+
+                  {/* Price Info */}
+                  {tickerData && (
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-lg font-bold">
+                          {formatPrice(tickerData.price)}
+                        </span>
+                        <Badge
+                          variant={
+                            parseFloat(tickerData.priceChangePercent) >= 0
+                              ? "default"
+                              : "destructive"
+                          }
+                          className="text-xs"
+                        >
+                          {formatPercent(tickerData.priceChangePercent)}
+                        </Badge>
+                      </div>
+                      <div className="space-y-1 text-xs text-muted-foreground">
+                        <div>High: {formatPrice(tickerData.high24h)}</div>
+                        <div>Low: {formatPrice(tickerData.low24h)}</div>
+                        <div>
+                          Volume:{" "}
+                          {parseFloat(tickerData.volume24h).toLocaleString()}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Data Info */}
+                  {initialData.length > 0 && (
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <div className="text-xs text-muted-foreground space-y-1">
+                        <div>Data Points: {initialData.length}</div>
+                        <div>Source: {currentDataSource}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sentiment Error Display */}
+                  {sentimentError && (
+                    <div className="bg-red-900/20 border border-red-500 rounded-lg p-3">
+                      <div className="text-xs text-red-400">
+                        Sentiment Error: {sentimentError}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Chart Area */}
+                <div className="flex-1 relative">
+                  {/* Chart Legend Overlay */}
+                  <div className="absolute top-2 left-2 z-10 flex gap-1 items-center bg-background/90 backdrop-blur-sm rounded px-2 py-1 text-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-0.5 bg-[#3b82f6]"></div>
+                        <span>MA7</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-0.5 bg-[#4ecdc4]"></div>
+                        <span>MA25</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-2 h-0.5 bg-[#f59e0b]"></div>
+                        <span>MA99</span>
+                      </div>
+                    </div>
+                    {isLoadingMore && (
+                      <div className="z-10 bg-background/90 backdrop-blur-sm rounded ml-1 text-xs text-muted-foreground flex items-center">
+                        <Loader2 className="size-3 animate-spin" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    ref={chartContainerRef}
+                    className="w-full h-full border border-slate-700 rounded"
+                  />
+
+                  {!hasMoreData && (
+                    <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground bg-background/90 backdrop-blur-sm rounded px-2 py-1">
+                      All available historical data loaded
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* News and Sentiment Panel - Takes up 1/3 of the space */}
+        <div className="lg:col-span-1">
+          <div className="space-y-4">
+            <NewsManager news={news} isLoading={isSentimentLoading} />
+
+            {/* Prediction Card */}
+            {prediction && (
+              <Card>
+                <CardContent className="p-4">
+                  <h3 className="font-semibold mb-2">Market Prediction</h3>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>Direction:</span>
+                      <Badge
+                        className={`${
+                          prediction.direction === "up"
+                            ? "bg-green-500"
+                            : prediction.direction === "down"
+                            ? "bg-red-500"
+                            : "bg-gray-500"
+                        } text-white`}
+                      >
+                        {prediction.direction.toUpperCase()}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Confidence:</span>
+                      <span>{(prediction.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                    {prediction.priceTarget && (
+                      <div className="flex justify-between">
+                        <span>Target:</span>
+                        <span>
+                          {formatPrice(prediction.priceTarget.toString())}
+                        </span>
+                      </div>
+                    )}
+                    <div className="text-xs text-gray-400 mt-2">
+                      {prediction.reasoning}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Data Info */}
-              {initialData.length > 0 && (
-                <div className="bg-muted/50 rounded-lg p-3">
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <div>Data Points: {initialData.length}</div>
-                    <div>Source: {currentDataSource}</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Chart Area */}
-            <div className="flex-1 relative">
-              {/* Chart Legend Overlay */}
-              <div className="absolute top-2 left-2 z-10 flex gap-1 items-center bg-background/90 backdrop-blur-sm rounded px-2 py-1 text-xs">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-0.5 bg-[#3b82f6]"></div>
-                    <span>MA7</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-0.5 bg-[#4ecdc4]"></div>
-                    <span>MA25</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="w-2 h-0.5 bg-[#f59e0b]"></div>
-                    <span>MA99</span>
-                  </div>
-                </div>
-                {isLoadingMore && (
-                  <div className="z-10 bg-background/90 backdrop-blur-sm rounded ml-1 text-xs text-muted-foreground flex items-center">
-                    <Loader2 className="size-3 animate-spin" />
-                  </div>
-                )}
-              </div>
-
-              <div
-                ref={chartContainerRef}
-                className="w-full h-full border border-slate-700 rounded"
-              />
-
-              {!hasMoreData && (
-                <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground bg-background/90 backdrop-blur-sm rounded px-2 py-1">
-                  All available historical data loaded
-                </div>
-              )}
-            </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 };
