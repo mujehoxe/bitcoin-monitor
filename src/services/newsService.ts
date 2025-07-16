@@ -141,7 +141,7 @@ export class NewsService {
     }
   }
 
-  private async fetchFromCryptoPanic(_limit: number): Promise<NewsArticle[]> {
+  private async fetchFromCryptoPanic(): Promise<NewsArticle[]> {
     try {
       // CryptoPanic API is currently disabled to avoid rate limiting issues
       // Enable this when you have proper API credentials
@@ -181,7 +181,7 @@ export class NewsService {
     }
   }
 
-  private async fetchFromCoinTelegraph(_limit: number): Promise<NewsArticle[]> {
+  private async fetchFromCoinTelegraph(): Promise<NewsArticle[]> {
     try {
       // CoinTelegraph RSS feed is currently disabled to avoid CORS issues
       // Enable this with a proper RSS parser or backend proxy

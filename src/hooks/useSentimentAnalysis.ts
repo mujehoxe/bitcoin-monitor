@@ -53,6 +53,14 @@ export const useSentimentAnalysis = (
   // Use ref to track if analysis is running to prevent multiple simultaneous calls
   const isAnalyzing = useRef(false);
   const analyzeSentimentRef = useRef<(() => Promise<void>) | null>(null);
+  const currentPriceRef = useRef(currentPrice);
+  const priceHistoryRef = useRef(stablePriceHistory);
+
+  // Update refs when values change
+  useEffect(() => {
+    currentPriceRef.current = currentPrice;
+    priceHistoryRef.current = stablePriceHistory;
+  }, [currentPrice, stablePriceHistory]);
 
   const analyzeSentiment = useCallback(async () => {
     if (isAnalyzing.current) {
@@ -100,14 +108,14 @@ export const useSentimentAnalysis = (
       // Generate prediction using current price and price history
       const marketPrediction = await sentimentService.generatePrediction(
         trend,
-        currentPrice,
-        stablePriceHistory
+        currentPriceRef.current,
+        priceHistoryRef.current
       );
 
       // Generate trading signal
       const signal = await sentimentService.generateTradingSignal(
         marketPrediction,
-        currentPrice,
+        currentPriceRef.current,
         trend
       );
 
@@ -125,7 +133,7 @@ export const useSentimentAnalysis = (
       setIsLoading(false);
       isAnalyzing.current = false;
     }
-  }, [currentPrice, stablePriceHistory, newsService, sentimentService]);
+  }, [newsService, sentimentService]); // Remove currentPrice and stablePriceHistory from dependencies
 
   // Update ref when function changes
   useEffect(() => {

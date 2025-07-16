@@ -3,20 +3,15 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NewsArticle } from "@/types/sentiment";
-import { Clock, ExternalLink, RefreshCw } from "lucide-react";
+import { Clock, ExternalLink } from "lucide-react";
 import React from "react";
 
 interface NewsManagerProps {
   news: NewsArticle[];
   isLoading: boolean;
-  onRefresh?: () => void;
 }
 
-const NewsManager: React.FC<NewsManagerProps> = ({
-  news,
-  isLoading,
-  onRefresh,
-}) => {
+const NewsManager: React.FC<NewsManagerProps> = ({ news, isLoading }) => {
   const truncateText = (text: string, maxLength: number) => {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + "...";
@@ -82,50 +77,28 @@ const NewsManager: React.FC<NewsManagerProps> = ({
 
   if (isLoading) {
     return (
-      <Card className="bg-gray-900/50 border-gray-700">
-        <CardHeader>
-          <CardTitle className="text-white flex items-center gap-2">
-            <Clock className="w-5 h-5" />
-            Real-time News Feed
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <div
-                key={i}
-                className="p-4 bg-gray-800 rounded border border-gray-700 animate-pulse"
-              >
-                <div className="h-4 bg-gray-600 rounded mb-2"></div>
-                <div className="h-3 bg-gray-600 rounded w-3/4 mb-2"></div>
-                <div className="h-2 bg-gray-600 rounded w-1/2"></div>
-              </div>
-            ))}
+      <div className="space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <div
+            key={i}
+            className="p-4 bg-gray-800 rounded border border-gray-700 animate-pulse"
+          >
+            <div className="h-4 bg-gray-600 rounded mb-2"></div>
+            <div className="h-3 bg-gray-600 rounded w-3/4 mb-2"></div>
+            <div className="h-2 bg-gray-600 rounded w-1/2"></div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     );
   }
 
   return (
     <Card className="bg-gray-900/50 border-gray-700">
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader>
         <CardTitle className="text-white flex items-center gap-2">
           <Clock className="w-5 h-5" />
           Real-time News Feed
         </CardTitle>
-        {onRefresh && (
-          <button
-            onClick={onRefresh}
-            disabled={isLoading}
-            className="p-2 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm hover:shadow-md"
-            title="Refresh News"
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-            />
-          </button>
-        )}
       </CardHeader>
       <CardContent>
         {news.length > 0 ? (

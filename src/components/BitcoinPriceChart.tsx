@@ -1,6 +1,5 @@
 "use client";
 
-import CompactSentimentPanel from "@/components/CompactSentimentPanel";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
@@ -13,8 +12,14 @@ import {
   LineSeries,
   Time,
 } from "lightweight-charts";
-import { ChevronLeft, ChevronRight, Loader2, RefreshCw } from "lucide-react";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 interface CandlestickData {
   time: Time;
@@ -72,148 +77,152 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState(false);
 
   // Get current price and price history for sentiment analysis
-  const currentPrice = tickerData
-    ? parseFloat(tickerData.price)
-    : initialData.length > 0
-    ? initialData[initialData.length - 1].close
-    : 0;
-  const priceHistory = initialData.slice(-100).map((d) => d.close); // Last 100 prices
+  const currentPrice = useMemo(() => {
+    return tickerData
+      ? parseFloat(tickerData.price)
+      : initialData.length > 0
+      ? initialData[initialData.length - 1].close
+      : 0;
+  }, [tickerData, initialData]);
+
+  const priceHistory = useMemo(() => {
+    return initialData.slice(-100).map((d) => d.close); // Last 100 prices
+  }, [initialData]);
+
+  const onDataUpdateRef = useRef(onDataUpdate);
+  onDataUpdateRef.current = onDataUpdate;
 
   // Call onDataUpdate when data changes
   React.useEffect(() => {
-    if (onDataUpdate) {
-      onDataUpdate(currentPrice, priceHistory);
+    if (onDataUpdateRef.current) {
+      onDataUpdateRef.current(currentPrice, priceHistory);
     }
-  }, [currentPrice, priceHistory, onDataUpdate]);
+  }, [currentPrice, priceHistory]);
 
-  // Sentiment analysis hook
-  const {
-    sentimentTrend,
-    prediction,
-    tradingSignal,
-    isLoading: isSentimentLoading,
-    error: sentimentError,
-    refreshSentiment,
-  } = useSentimentAnalysis(currentPrice, priceHistory);
+  // Sentiment analysis hook - only need error state for display
+  const { error: sentimentError } = useSentimentAnalysis(
+    currentPrice,
+    priceHistory
+  );
 
   // Fetch historical data with multiple data sources as fallback
-  const fetchHistoricalData = async (
-    endTime?: number,
-    isLoadingMore = false
-  ) => {
-    try {
-      if (isLoadingMore) {
-        setIsLoadingMore(true);
-      }
-
-      console.log(
-        "Fetching historical data...",
-        endTime ? `before ${endTime}` : "latest"
-      );
-
-      let klines: CandlestickData[] = [];
-
-      // Try multiple data sources in order of preference
+  const fetchHistoricalData = useCallback(
+    async (endTime?: number, isLoadingMore = false) => {
       try {
-        // First try Binance (more reliable for historical data)
-        klines = await fetchFromBinance(endTime);
-        setCurrentDataSource("Binance");
-        console.log(
-          "Successfully fetched from Binance:",
-          klines.length,
-          "candles"
-        );
-      } catch (binanceError) {
-        console.warn("Binance failed, trying Bybit:", binanceError);
-
-        try {
-          // Fallback to Bybit
-          klines = await fetchFromBybit(endTime);
-          setCurrentDataSource("Bybit");
-          console.log(
-            "Successfully fetched from Bybit:",
-            klines.length,
-            "candles"
-          );
-        } catch (bybitError) {
-          console.warn("Bybit failed, trying CoinGecko:", bybitError);
-
-          // Fallback to CoinGecko (limited but more historical data)
-          klines = await fetchFromCoinGecko(endTime);
-          setCurrentDataSource("CoinGecko");
-          console.log(
-            "Successfully fetched from CoinGecko:",
-            klines.length,
-            "candles"
-          );
+        if (isLoadingMore) {
+          setIsLoadingMore(true);
         }
-      }
 
-      if (klines.length > 0) {
-        const firstTimestamp = klines[0].time as number;
+        console.log(
+          "Fetching historical data...",
+          endTime ? `before ${endTime}` : "latest"
+        );
 
-        if (isLoadingMore && endTime) {
-          // If this is loading more data, prepend to existing data
-          setInitialData((prevData) => {
-            // Filter out any potential duplicates and merge
-            const existingTimestamps = new Set(
-              prevData.map((item) => item.time)
+        let klines: CandlestickData[] = [];
+
+        // Try multiple data sources in order of preference
+        try {
+          // First try Binance (more reliable for historical data)
+          klines = await fetchFromBinance(endTime);
+          setCurrentDataSource("Binance");
+          console.log(
+            "Successfully fetched from Binance:",
+            klines.length,
+            "candles"
+          );
+        } catch (binanceError) {
+          console.warn("Binance failed, trying Bybit:", binanceError);
+
+          try {
+            // Fallback to Bybit
+            klines = await fetchFromBybit(endTime);
+            setCurrentDataSource("Bybit");
+            console.log(
+              "Successfully fetched from Bybit:",
+              klines.length,
+              "candles"
             );
-            const newData = klines.filter(
-              (item: CandlestickData) => !existingTimestamps.has(item.time)
-            );
+          } catch (bybitError) {
+            console.warn("Bybit failed, trying CoinGecko:", bybitError);
 
-            const combined = [...newData, ...prevData];
-            const sortedData = combined.sort(
+            // Fallback to CoinGecko (limited but more historical data)
+            klines = await fetchFromCoinGecko(endTime);
+            setCurrentDataSource("CoinGecko");
+            console.log(
+              "Successfully fetched from CoinGecko:",
+              klines.length,
+              "candles"
+            );
+          }
+        }
+
+        if (klines.length > 0) {
+          const firstTimestamp = klines[0].time as number;
+
+          if (isLoadingMore && endTime) {
+            // If this is loading more data, prepend to existing data
+            setInitialData((prevData) => {
+              // Filter out any potential duplicates and merge
+              const existingTimestamps = new Set(
+                prevData.map((item) => item.time)
+              );
+              const newData = klines.filter(
+                (item: CandlestickData) => !existingTimestamps.has(item.time)
+              );
+
+              const combined = [...newData, ...prevData];
+              const sortedData = combined.sort(
+                (a: CandlestickData, b: CandlestickData) =>
+                  (a.time as number) - (b.time as number)
+              );
+
+              console.log(
+                `Combined data: ${newData.length} new + ${prevData.length} existing = ${sortedData.length} total`
+              );
+              return sortedData;
+            });
+
+            // Update earliest timestamp
+            setEarliestTimestamp(firstTimestamp);
+
+            // Check if we got fewer results than requested (indicating we've reached the end)
+            if (klines.length < 100) {
+              // Lower threshold since different APIs have different limits
+              setHasMoreData(false);
+            }
+          } else {
+            // If this is initial load, replace all data
+            const sortedData = klines.sort(
               (a: CandlestickData, b: CandlestickData) =>
                 (a.time as number) - (b.time as number)
             );
-
-            console.log(
-              `Combined data: ${newData.length} new + ${prevData.length} existing = ${sortedData.length} total`
-            );
-            return sortedData;
-          });
-
-          // Update earliest timestamp
-          setEarliestTimestamp(firstTimestamp);
-
-          // Check if we got fewer results than requested (indicating we've reached the end)
-          if (klines.length < 100) {
-            // Lower threshold since different APIs have different limits
-            setHasMoreData(false);
+            setInitialData(sortedData);
+            setEarliestTimestamp(firstTimestamp);
+            setIsLoading(false);
           }
         } else {
-          // If this is initial load, replace all data
-          const sortedData = klines.sort(
-            (a: CandlestickData, b: CandlestickData) =>
-              (a.time as number) - (b.time as number)
-          );
-          setInitialData(sortedData);
-          setEarliestTimestamp(firstTimestamp);
-          setIsLoading(false);
+          if (!isLoadingMore) {
+            setIsLoading(false);
+          }
+          setHasMoreData(false);
         }
-      } else {
-        if (!isLoadingMore) {
-          setIsLoading(false);
-        }
-        setHasMoreData(false);
-      }
 
-      if (isLoadingMore) {
+        if (isLoadingMore) {
+          setIsLoadingMore(false);
+        }
+      } catch (err) {
+        console.error("Error fetching historical data from all sources:", err);
+        setError(
+          `Failed to fetch historical data from all sources: ${
+            err instanceof Error ? err.message : "Unknown error"
+          }`
+        );
+        setIsLoading(false);
         setIsLoadingMore(false);
       }
-    } catch (err) {
-      console.error("Error fetching historical data from all sources:", err);
-      setError(
-        `Failed to fetch historical data from all sources: ${
-          err instanceof Error ? err.message : "Unknown error"
-        }`
-      );
-      setIsLoading(false);
-      setIsLoadingMore(false);
-    }
-  };
+    },
+    []
+  ); // Empty dependency array since it only uses stable setState functions
 
   // Load more historical data when scrolling back
   const loadMoreHistoricalData = useCallback(async () => {
@@ -237,7 +246,7 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
       setError("Failed to load more historical data");
       setIsLoadingMore(false);
     }
-  }, [isLoadingMore, earliestTimestamp, hasMoreData]);
+  }, [isLoadingMore, earliestTimestamp, hasMoreData, fetchHistoricalData]);
 
   // Calculate moving average
   const calculateMovingAverage = (
@@ -335,7 +344,10 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
               return;
             }
           } catch (error) {
-            console.error("Failed to update chart data:", error);
+            console.warn(
+              "Failed to update chart with existing instance:",
+              error
+            );
             // If update fails, recreate the chart
             if (chartRef.current && !isDisposedRef.current) {
               try {
@@ -371,6 +383,18 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
 
       // Don't create new chart if disposed
       if (isDisposedRef.current) {
+        return;
+      }
+
+      // Ensure container has dimensions
+      const container = chartContainerRef.current;
+      if (
+        !container ||
+        container.clientWidth === 0 ||
+        container.clientHeight === 0
+      ) {
+        console.warn("Chart container has zero dimensions, waiting...");
+        setTimeout(() => initializeChart(), 100);
         return;
       }
 
@@ -755,7 +779,7 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
   useEffect(() => {
     fetchHistoricalData();
     fetchTickerData();
-  }, []);
+  }, [fetchHistoricalData]);
 
   // Initialize chart when data is ready (but only once)
   useEffect(() => {
@@ -792,9 +816,7 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
 
   // Connect to WebSocket (separate from chart initialization)
   useEffect(() => {
-    if (initialData.length > 0 && !isWebSocketConnected) {
-      connectWebSocket();
-    }
+    if (initialData.length > 0 && !isWebSocketConnected) connectWebSocket();
   }, [initialData, connectWebSocket, isWebSocketConnected]);
 
   const formatPrice = (price: string | number) => {
@@ -985,8 +1007,8 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
   }
 
   return (
-    <div className="mx-16 p-2">
-      <div className="flex gap-4 h-[calc(100vh-2rem)]">
+    <div className="w-full h-screen flex items-center p-2">
+      <div className="flex gap-4 h-[calc(100vh-2rem)] w-full">
         {/* Price Chart - Takes up most of the space */}
         <div className="flex-1">
           <Card className="h-full">
@@ -1102,37 +1124,6 @@ const BitcoinPriceChart: React.FC<BitcoinPriceChartProps> = ({
                           </div>
                         </div>
                       )}
-
-                      {/* Sentiment Analysis Components */}
-                      <div className="bg-muted/50 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <h3 className="text-sm font-bold">
-                            Sentiment Analysis
-                          </h3>
-                          <button
-                            onClick={refreshSentiment}
-                            disabled={isSentimentLoading}
-                            className="p-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Refresh Sentiment Analysis"
-                          >
-                            <RefreshCw
-                              className={`h-3 w-3 ${
-                                isSentimentLoading ? "animate-spin" : ""
-                              }`}
-                            />
-                          </button>
-                        </div>
-
-                        {/* Compact Sentiment Analysis */}
-                        <div className="space-y-2">
-                          <CompactSentimentPanel
-                            sentimentTrend={sentimentTrend}
-                            tradingSignal={tradingSignal}
-                            prediction={prediction}
-                            isLoading={isSentimentLoading}
-                          />
-                        </div>
-                      </div>
                     </>
                   )}
                 </div>

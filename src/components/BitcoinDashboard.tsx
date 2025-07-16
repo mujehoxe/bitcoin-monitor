@@ -2,34 +2,17 @@
 
 import BitcoinPriceChart from "@/components/BitcoinPriceChart";
 import NewsSidebar from "@/components/NewsSidebar";
-import React, { useState } from "react";
-
-interface BitcoinData {
-  currentPrice: number;
-  priceHistory: number[];
-}
+import React from "react";
 
 const BitcoinDashboard: React.FC = () => {
-  const [bitcoinData, setBitcoinData] = useState<BitcoinData>({
-    currentPrice: 0,
-    priceHistory: [],
-  });
-
-  const handleDataUpdate = (currentPrice: number, priceHistory: number[]) => {
-    setBitcoinData({ currentPrice, priceHistory });
-  };
-
   return (
-    <div className="min-h-screen bg-background">
-      <NewsSidebar
-        currentPrice={bitcoinData.currentPrice}
-        priceHistory={bitcoinData.priceHistory}
-      />
-      <div className="w-full">
-        <main>
-          <BitcoinPriceChart onDataUpdate={handleDataUpdate} />
-        </main>
-      </div>
+    <div className="min-h-screen bg-background flex">
+      <NewsSidebar />
+      <main className="flex-1 overflow-hidden">
+        <div className="h-full">
+          <BitcoinPriceChart />
+        </div>
+      </main>
     </div>
   );
 };
