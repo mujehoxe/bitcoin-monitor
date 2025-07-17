@@ -3,20 +3,43 @@ import { CryptoRSSService } from "@/services/cryptoRSSService";
 import fs from 'fs';
 import path from 'path';
 
-// Read feeds from CSV file (server-side only)
+let feedsCache: string[] | null = null;
+
+// Read feeds from CSV file (server-side only) - cached
 function loadFeedsFromCSV(): string[] {
+  if (feedsCache) {
+    return feedsCache;
+  }
+
   try {
     const csvPath = path.join(process.cwd(), 'crypto_feeds.csv');
     const csvContent = fs.readFileSync(csvPath, 'utf-8');
     const lines = csvContent.split('\n')
       .filter(line => line.trim() && !line.startsWith('Feed') && line.startsWith('http'));
     
-    console.log(`📰 Loaded ${lines.length} crypto RSS feeds from CSV`);
+    feedsCache = lines;
+    console.log(`📰 Loaded ${lines.length} crypto RSS feeds from CSV (cached)`);
     return lines;
   } catch (error) {
     console.error('Error loading crypto feeds CSV:', error);
     return [];
   }
+}
+
+// Initialize RSS service once
+let rssServiceInitialized = false;
+async function initializeRSSService(): Promise<CryptoRSSService> {
+  const rssService = CryptoRSSService.getInstance();
+  
+  if (!rssServiceInitialized) {
+    const feedUrls = loadFeedsFromCSV();
+    if (feedUrls.length > 0) {
+      rssService.initializeFeeds(feedUrls);
+      rssServiceInitialized = true;
+    }
+  }
+  
+  return rssService;
 }
 
 export async function GET(request: NextRequest) {
@@ -25,13 +48,7 @@ export async function GET(request: NextRequest) {
   const refresh = searchParams.get("refresh") === "true";
 
   try {
-    const rssService = CryptoRSSService.getInstance();
-    
-    // Initialize feeds from CSV if not already done
-    const feedUrls = loadFeedsFromCSV();
-    if (feedUrls.length > 0) {
-      rssService.initializeFeeds(feedUrls);
-    }
+    const rssService = await initializeRSSService();
     
     if (refresh) {
       await rssService.refreshFeeds();
@@ -71,13 +88,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action, query } = body;
 
-    const rssService = CryptoRSSService.getInstance();
-    
-    // Initialize feeds from CSV if not already done
-    const feedUrls = loadFeedsFromCSV();
-    if (feedUrls.length > 0) {
-      rssService.initializeFeeds(feedUrls);
-    }
+    const rssService = await initializeRSSService();
 
     switch (action) {
       case "refresh":
@@ -106,4 +117,10 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Function to reset cache (for development/testing)
+export function resetFeedsCache(): void {
+  feedsCache = null;
+  rssServiceInitialized = false;
 }

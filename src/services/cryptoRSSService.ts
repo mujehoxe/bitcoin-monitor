@@ -74,25 +74,41 @@ export class CryptoRSSService {
   async fetchAllFeeds(): Promise<NewsArticle[]> {
     console.log('🔄 Fetching from all crypto RSS feeds...');
     
-    const fetchPromises = this.feeds
-      .filter(feed => feed.isActive && feed.errorCount < this.maxErrorCount)
-      .map(feed => this.fetchSingleFeed(feed));
-
-    const results = await Promise.allSettled(fetchPromises);
+    const activeFeeds = this.feeds.filter(feed => feed.isActive && feed.errorCount < this.maxErrorCount);
+    console.log(`📊 Attempting to fetch from ${activeFeeds.length} active feeds`);
     
+    // Limit concurrent requests to prevent memory issues
+    const batchSize = 10;
     const allArticles: NewsArticle[] = [];
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        allArticles.push(...result.value);
-      } else {
-        const feed = this.feeds[index];
-        feed.errorCount++;
-        if (feed.errorCount >= this.maxErrorCount) {
-          feed.isActive = false;
-          console.warn(`❌ Deactivated feed ${feed.name} after ${this.maxErrorCount} errors`);
+    
+    for (let i = 0; i < activeFeeds.length; i += batchSize) {
+      const batch = activeFeeds.slice(i, i + batchSize);
+      const batchPromises = batch.map(feed => this.fetchSingleFeed(feed));
+      
+      const results = await Promise.allSettled(batchPromises);
+      
+      results.forEach((result, index) => {
+        const feedIndex = this.feeds.findIndex(f => f.url === batch[index].url);
+        if (feedIndex !== -1) {
+          if (result.status === 'fulfilled') {
+            allArticles.push(...result.value);
+            // Reset error count on success
+            this.feeds[feedIndex].errorCount = Math.max(0, this.feeds[feedIndex].errorCount - 1);
+          } else {
+            this.feeds[feedIndex].errorCount++;
+            if (this.feeds[feedIndex].errorCount >= this.maxErrorCount) {
+              this.feeds[feedIndex].isActive = false;
+              console.warn(`❌ Deactivated feed ${this.feeds[feedIndex].name} after ${this.maxErrorCount} errors`);
+            }
+          }
         }
+      });
+      
+      // Small delay between batches to be respectful
+      if (i + batchSize < activeFeeds.length) {
+        await new Promise(resolve => setTimeout(resolve, 100));
       }
-    });
+    }
 
     // Remove duplicates based on title and URL
     const uniqueArticles = this.removeDuplicates(allArticles);
@@ -111,19 +127,24 @@ export class CryptoRSSService {
     this.articles = recentArticles.slice(0, this.maxArticles);
     this.lastUpdate = new Date();
 
-    console.log(`✅ Fetched ${this.articles.length} articles from ${this.getActiveFeeds().length} feeds`);
+    const activeCount = this.getActiveFeeds().length;
+    const inactiveCount = this.getInactiveFeeds().length;
+    console.log(`✅ Fetched ${this.articles.length} articles from ${activeCount} active feeds (${inactiveCount} inactive)`);
+    
     return this.articles;
   }
 
   private async fetchSingleFeed(feed: CryptoFeed): Promise<NewsArticle[]> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
       const response = await fetch(feed.url, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (compatible; CryptoNewsBot/1.0)',
-          'Accept': 'application/rss+xml, application/xml, text/xml'
+          'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Cache-Control': 'no-cache'
         },
         signal: controller.signal
       });
@@ -135,15 +156,23 @@ export class CryptoRSSService {
       }
 
       const xmlText = await response.text();
+      if (!xmlText || xmlText.length < 50) {
+        throw new Error('Empty or invalid RSS response');
+      }
+
       const articles = this.parseRSSFeed(xmlText, feed);
       
       feed.lastFetched = new Date();
-      feed.errorCount = Math.max(0, feed.errorCount - 1); // Reduce error count on success
       
       return articles;
     } catch (error) {
-      console.warn(`⚠️ Failed to fetch ${feed.name}: ${error}`);
-      feed.errorCount++;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      // Only log errors for feeds that haven't been marked as problematic
+      if (feed.errorCount < 3) {
+        console.warn(`⚠️ Failed to fetch ${feed.name}: ${errorMessage}`);
+      }
+      
       return [];
     }
   }
