@@ -28,27 +28,38 @@ class GNewsService:
     def __init__(self):
         self.gnews = GNews()
         self.gnews.period = "1d"  # Last 24 hours
-        self.gnews.max_results = 20
+        self.gnews.max_results = 30  # Increased for better coverage
         self.gnews.language = "en"
         self.gnews.country = "US"
+        self.gnews.exclude_websites = ["youtube.com", "facebook.com", "twitter.com"]  # Exclude social media
 
     def search_bitcoin_news(self) -> List[Dict[str, Any]]:
         """Fetch Bitcoin-related news"""
         try:
-            news = self.gnews.get_news("bitcoin OR cryptocurrency OR BTC")
-            return self._format_news(news, "bitcoin")
+            logger.info("Fetching Bitcoin news...")
+            # Use more comprehensive search terms
+            news = self.gnews.get_news("bitcoin OR cryptocurrency OR BTC OR blockchain")
+            logger.info(f"Retrieved {len(news)} articles from gnews")
+            formatted_news = self._format_news(news, "bitcoin")
+            logger.info(f"Formatted {len(formatted_news)} articles")
+            return formatted_news
         except Exception as e:
             logger.error(f"Error fetching Bitcoin news: {e}")
-            return self._get_demo_bitcoin_news()
+            return []
 
     def search_crypto_news(self) -> List[Dict[str, Any]]:
         """Fetch general cryptocurrency news"""
         try:
-            news = self.gnews.get_news("cryptocurrency")
-            return self._format_news(news, "crypto")
+            logger.info("Fetching crypto news...")
+            # Use more comprehensive search terms
+            news = self.gnews.get_news("cryptocurrency OR ethereum OR crypto OR altcoin")
+            logger.info(f"Retrieved {len(news)} articles from gnews")
+            formatted_news = self._format_news(news, "crypto")
+            logger.info(f"Formatted {len(formatted_news)} articles")
+            return formatted_news
         except Exception as e:
             logger.error(f"Error fetching crypto news: {e}")
-            return self._get_demo_crypto_news()
+            return []
 
     def _format_news(
         self, news_items: List[Dict[str, Any]], category: str
@@ -90,49 +101,6 @@ class GNewsService:
                 continue
 
         return formatted
-
-    def _get_demo_bitcoin_news(self) -> List[Dict[str, Any]]:
-        """Return demo Bitcoin news when API fails"""
-        return [
-            {
-                "id": "gnews-bitcoin-demo-1",
-                "title": "Bitcoin Reaches New All-Time High Amid Institutional Adoption",
-                "description": "Bitcoin surges past $70,000 as major corporations announce Bitcoin treasury additions.",
-                "content": "The cryptocurrency market sees unprecedented institutional interest with multiple Fortune 500 companies adding Bitcoin to their balance sheets.",
-                "publishedAt": datetime.now().isoformat(),
-                "source": "GNews Bitcoin",
-                "url": "https://example.com/bitcoin-news-1",
-                "author": "GNews",
-                "urlToImage": None,
-            },
-            {
-                "id": "gnews-bitcoin-demo-2",
-                "title": "Global Bank Launches Bitcoin Custody Services",
-                "description": "Leading international bank introduces comprehensive Bitcoin custody solutions for institutional clients.",
-                "content": "The new service provides secure storage and management of Bitcoin assets for large institutional investors.",
-                "publishedAt": (datetime.now() - timedelta(hours=2)).isoformat(),
-                "source": "GNews Bitcoin",
-                "url": "https://example.com/bitcoin-news-2",
-                "author": "GNews",
-                "urlToImage": None,
-            },
-        ]
-
-    def _get_demo_crypto_news(self) -> List[Dict[str, Any]]:
-        """Return demo crypto news when API fails"""
-        return [
-            {
-                "id": "gnews-crypto-demo-1",
-                "title": "Ethereum Layer 2 Solutions See Explosive Growth",
-                "description": "Ethereum's Layer 2 scaling solutions are experiencing unprecedented adoption rates.",
-                "content": "Recent data shows that Layer 2 solutions are processing more transactions than ever...",
-                "publishedAt": datetime.now().isoformat(),
-                "source": "GNews Crypto",
-                "url": "https://example.com/crypto-news-1",
-                "author": "GNews",
-                "urlToImage": None,
-            }
-        ]
 
 
 class GNewsRequestHandler(BaseHTTPRequestHandler):
