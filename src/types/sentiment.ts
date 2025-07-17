@@ -8,6 +8,7 @@ export interface NewsArticle {
   url: string;
   author?: string;
   urlToImage?: string;
+  category?: string; // news, blog, magazine, social, analysis, market, tech
 }
 
 export interface SentimentScore {

@@ -1,5 +1,6 @@
 import { NewsArticle } from "@/types/sentiment";
 import { CryptoRSSService } from "./cryptoRSSService";
+import { SocialAPIService } from "./socialAPIService";
 
 export interface NewsSource {
   id: string;
@@ -23,10 +24,12 @@ export class RealTimeNewsService {
   private newsCache: Map<string, NewsArticle[]> = new Map();
   private refreshTimers: Map<string, NodeJS.Timeout> = new Map();
   private cryptoRSSService: CryptoRSSService;
+  private socialAPIService: SocialAPIService;
   private lastFetchTimes: Map<string, number> = new Map();
 
   private constructor() {
     this.cryptoRSSService = CryptoRSSService.getInstance();
+    this.socialAPIService = SocialAPIService.getInstance();
 
     // Simplified configuration - only crypto RSS feeds
     this.config = {
@@ -39,6 +42,13 @@ export class RealTimeNewsService {
           id: "crypto-rss",
           name: "Crypto RSS Feeds",
           url: "/api/crypto-rss",
+          category: "crypto",
+          hasWebSocket: false,
+        },
+        {
+          id: "social-api",
+          name: "Social Media APIs",
+          url: "/api/social-feeds",
           category: "crypto",
           hasWebSocket: false,
         },
@@ -67,36 +77,67 @@ export class RealTimeNewsService {
   private startRefreshTimer(): void {
     const timer = setInterval(async () => {
       try {
-        console.log("🔄 Auto-refreshing crypto RSS feeds...");
+        console.log("🔄 Auto-refreshing crypto RSS and social feeds...");
         
-        // Refresh via API
-        const response = await fetch('/api/crypto-rss?refresh=true');
-        if (response.ok) {
-          const data = await response.json();
-          console.log(`✅ Refreshed ${data.totalArticles} articles from crypto RSS feeds`);
-        } else {
-          console.error("❌ Error during auto-refresh:", response.statusText);
+        // Refresh both RSS and social feeds
+        const [rssResponse, socialResponse] = await Promise.allSettled([
+          fetch('/api/crypto-rss?refresh=true'),
+          fetch('/api/social-feeds?refresh=true')
+        ]);
+
+        let totalArticles = 0;
+        
+        if (rssResponse.status === 'fulfilled' && rssResponse.value.ok) {
+          const rssData = await rssResponse.value.json();
+          totalArticles += rssData.totalArticles || 0;
         }
+        
+        if (socialResponse.status === 'fulfilled' && socialResponse.value.ok) {
+          const socialData = await socialResponse.value.json();
+          totalArticles += socialData.totalArticles || 0;
+        }
+
+        console.log(`✅ Refreshed ${totalArticles} articles from all news sources`);
       } catch (error) {
         console.error("❌ Error during auto-refresh:", error);
       }
     }, this.config.refreshInterval);
 
-    this.refreshTimers.set("crypto-rss", timer);
+    this.refreshTimers.set("all-feeds", timer);
   }
 
   async getAllNews(): Promise<NewsArticle[]> {
     try {
-      // Fetch from the API which will handle RSS service initialization
-      const response = await fetch('/api/crypto-rss');
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Fetch from both RSS and social media APIs
+      const [rssResponse, socialResponse] = await Promise.allSettled([
+        fetch('/api/crypto-rss'),
+        fetch('/api/social-feeds')
+      ]);
+
+      const allArticles: NewsArticle[] = [];
+
+      // Process RSS feeds
+      if (rssResponse.status === 'fulfilled' && rssResponse.value.ok) {
+        const rssData = await rssResponse.value.json();
+        allArticles.push(...(rssData.articles || []));
+      } else {
+        console.warn('RSS feeds failed:', rssResponse.status === 'rejected' ? rssResponse.reason : 'HTTP error');
       }
-      
-      const data = await response.json();
-      return data.articles || [];
+
+      // Process social media feeds
+      if (socialResponse.status === 'fulfilled' && socialResponse.value.ok) {
+        const socialData = await socialResponse.value.json();
+        allArticles.push(...(socialData.articles || []));
+      } else {
+        console.warn('Social feeds failed:', socialResponse.status === 'rejected' ? socialResponse.reason : 'HTTP error');
+      }
+
+      // Sort by publication date (newest first)
+      allArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
+
+      return allArticles;
     } catch (error) {
-      console.error('Error fetching news from API:', error);
+      console.error('Error fetching news from APIs:', error);
       return [];
     }
   }
@@ -109,11 +150,19 @@ export class RealTimeNewsService {
   }
 
   async refreshAllSources(): Promise<void> {
-    console.log("🔄 Refreshing all crypto RSS feeds...");
+    console.log("🔄 Refreshing all crypto RSS and social feeds...");
+    
+    // Refresh RSS feeds
     await this.cryptoRSSService.refreshFeeds();
-    const articles = this.cryptoRSSService.getArticles();
-    this.newsCache.set("crypto-rss", articles);
-    console.log(`✅ Refreshed ${articles.length} articles from crypto RSS feeds`);
+    const rssArticles = this.cryptoRSSService.getArticles();
+    this.newsCache.set("crypto-rss", rssArticles);
+    
+    // Refresh social feeds
+    await this.socialAPIService.refreshFeeds();
+    const socialArticles = this.socialAPIService.getArticles();
+    this.newsCache.set("social-api", socialArticles);
+    
+    console.log(`✅ Refreshed ${rssArticles.length} RSS articles and ${socialArticles.length} social articles`);
   }
 
   async searchNews(query: string): Promise<NewsArticle[]> {

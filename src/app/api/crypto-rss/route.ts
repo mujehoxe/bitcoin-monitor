@@ -118,9 +118,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
-// Function to reset cache (for development/testing)
-export function resetFeedsCache(): void {
-  feedsCache = null;
-  rssServiceInitialized = false;
-}

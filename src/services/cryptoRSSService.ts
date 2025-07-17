@@ -137,19 +137,43 @@ export class CryptoRSSService {
   private async fetchSingleFeed(feed: CryptoFeed): Promise<NewsArticle[]> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-      const response = await fetch(feed.url, {
+      let response = await fetch(feed.url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; CryptoNewsBot/1.0)',
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
           'Accept': 'application/rss+xml, application/xml, text/xml, */*',
           'Accept-Language': 'en-US,en;q=0.9',
-          'Cache-Control': 'no-cache'
+          'Cache-Control': 'no-cache',
+          'Referer': 'https://www.google.com/'
         },
-        signal: controller.signal
+        signal: controller.signal,
+        redirect: 'follow'
       });
 
       clearTimeout(timeoutId);
+
+      // Handle redirects manually for some feeds
+      if (response.status === 301 || response.status === 302) {
+        const location = response.headers.get('location');
+        if (location) {
+          console.log(`🔄 Following redirect for ${feed.name}: ${location}`);
+          const newController = new AbortController();
+          const newTimeoutId = setTimeout(() => newController.abort(), 10000);
+          
+          response = await fetch(location, {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+              'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+              'Accept-Language': 'en-US,en;q=0.9',
+              'Cache-Control': 'no-cache'
+            },
+            signal: newController.signal
+          });
+          
+          clearTimeout(newTimeoutId);
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -158,6 +182,11 @@ export class CryptoRSSService {
       const xmlText = await response.text();
       if (!xmlText || xmlText.length < 50) {
         throw new Error('Empty or invalid RSS response');
+      }
+
+      // Check if it's actually an RSS/XML feed
+      if (!xmlText.includes('<rss') && !xmlText.includes('<feed') && !xmlText.includes('<?xml')) {
+        throw new Error('Response is not a valid RSS/XML feed');
       }
 
       const articles = this.parseRSSFeed(xmlText, feed);
@@ -179,19 +208,31 @@ export class CryptoRSSService {
 
   private parseRSSFeed(xmlText: string, feed: CryptoFeed): NewsArticle[] {
     try {
-      // Simple regex-based XML parsing (more reliable than DOMParser in Node.js)
+      // Handle different RSS formats
       const items = this.extractItemsFromXML(xmlText);
       
       return items.map((item, index) => {
         const title = this.extractXMLContent(item, 'title') || 'No title';
         const description = this.extractXMLContent(item, 'description') || 
                            this.extractXMLContent(item, 'content:encoded') || 
+                           this.extractXMLContent(item, 'content') ||
                            'No description';
-        const link = this.extractXMLContent(item, 'link') || '';
-        const pubDate = this.extractXMLContent(item, 'pubDate') || new Date().toISOString();
+        const link = this.extractXMLContent(item, 'link') || 
+                    this.extractXMLContent(item, 'guid') || '';
+        
+        // Handle different date formats
+        const pubDate = this.extractXMLContent(item, 'pubDate') || 
+                       this.extractXMLContent(item, 'published') ||
+                       this.extractXMLContent(item, 'updated') ||
+                       new Date().toISOString();
+        
         const author = this.extractXMLContent(item, 'author') || 
                       this.extractXMLContent(item, 'dc:creator') || 
+                      this.extractXMLContent(item, 'creator') ||
                       feed.name;
+
+        // Determine source category
+        const category = this.determineCategory(feed.url, title, description);
 
         return {
           id: `${feed.name}-${Date.now()}-${index}`,
@@ -202,13 +243,81 @@ export class CryptoRSSService {
           source: feed.name,
           url: link,
           author: this.cleanText(author),
-          urlToImage: this.extractImageFromDescription(description)
+          urlToImage: this.extractImageFromDescription(description),
+          category: category
         };
       });
     } catch (error) {
       console.error(`Error parsing RSS for ${feed.name}:`, error);
       return [];
     }
+  }
+
+  private determineCategory(feedUrl: string, title: string, description: string): string {
+    const url = feedUrl.toLowerCase();
+    const content = (title + ' ' + description).toLowerCase();
+    
+    // Social media sources (Reddit feeds)
+    if (url.includes('reddit.com') || url.includes('twitter.com') || url.includes('x.com')) {
+      return 'social';
+    }
+    
+    // Blogs - expanded detection
+    if (url.includes('blog') || url.includes('medium') || url.includes('substack') ||
+        url.includes('cryptobriefing') || url.includes('cryptodaily') || 
+        url.includes('dailyhodl') || url.includes('cryptomode') ||
+        url.includes('cryptovibes') || url.includes('nulltx') ||
+        url.includes('cryptoweekly') || url.includes('cryptovest') ||
+        url.includes('cryptobasic') || url.includes('cryptogazette')) {
+      return 'blog';
+    }
+    
+    // Magazines - expanded detection
+    if (url.includes('magazine') || url.includes('review') || 
+        url.includes('decrypt') || url.includes('blockworks') ||
+        url.includes('coinpedia') || url.includes('cryptoslate') ||
+        url.includes('beincrypto') || url.includes('coincu') ||
+        url.includes('blockonomi') || url.includes('cryptoticker') ||
+        url.includes('cryptopolitan') || url.includes('coinspeaker')) {
+      return 'magazine';
+    }
+    
+    // Analysis sources
+    if (url.includes('analysis') || url.includes('theblock') ||
+        url.includes('thecurrencyanalytics') || url.includes('finbold') ||
+        url.includes('ambcrypto') || url.includes('coingape') ||
+        content.includes('analysis') || content.includes('review') || 
+        content.includes('opinion') || content.includes('prediction')) {
+      return 'analysis';
+    }
+    
+    // Market/Trading content
+    if (content.includes('market') || content.includes('price') || 
+        content.includes('trading') || content.includes('chart') ||
+        content.includes('technical') || content.includes('signals')) {
+      return 'market';
+    }
+    
+    // Technology content
+    if (content.includes('technology') || content.includes('development') || 
+        content.includes('protocol') || content.includes('blockchain') ||
+        content.includes('smart contract') || content.includes('upgrade')) {
+      return 'tech';
+    }
+    
+    // News sources - traditional news outlets
+    if (url.includes('news') || url.includes('telegraph') || url.includes('daily') || 
+        url.includes('today') || url.includes('breaking') || url.includes('coindesk') ||
+        url.includes('cointelegraph') || url.includes('newsbtc') ||
+        url.includes('coinjournal') || url.includes('bitcoin.com') ||
+        url.includes('cryptonews') || url.includes('bitcoinist') ||
+        url.includes('cryptonewsz') || url.includes('btcmanager') ||
+        url.includes('cryptopanic')) {
+      return 'news';
+    }
+    
+    // Default to news for unmatched sources
+    return 'news';
   }
 
   private extractItemsFromXML(xmlText: string): string[] {
