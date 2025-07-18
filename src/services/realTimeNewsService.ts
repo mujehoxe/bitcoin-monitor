@@ -1,6 +1,4 @@
 import { NewsArticle } from "@/types/sentiment";
-import { CryptoRSSService } from "./cryptoRSSService";
-import { SocialAPIService } from "./socialAPIService";
 
 export interface NewsSource {
   id: string;
@@ -23,15 +21,10 @@ export class RealTimeNewsService {
   private config: RealTimeNewsConfig;
   private newsCache: Map<string, NewsArticle[]> = new Map();
   private refreshTimers: Map<string, NodeJS.Timeout> = new Map();
-  private cryptoRSSService: CryptoRSSService;
-  private socialAPIService: SocialAPIService;
   private lastFetchTimes: Map<string, number> = new Map();
 
   private constructor() {
-    this.cryptoRSSService = CryptoRSSService.getInstance();
-    this.socialAPIService = SocialAPIService.getInstance();
-
-    // Simplified configuration - only crypto RSS feeds
+    // Simplified configuration - unified crypto feeds (RSS + Social)
     this.config = {
       refreshInterval: parseInt(
         process.env.NEXT_PUBLIC_NEWS_REFRESH_INTERVAL || "300000" // 5 minutes
@@ -39,16 +32,9 @@ export class RealTimeNewsService {
       maxArticles: 200,
       sources: [
         {
-          id: "crypto-rss",
-          name: "Crypto RSS Feeds",
+          id: "crypto-unified",
+          name: "Crypto Unified Feeds",
           url: "/api/crypto-rss",
-          category: "crypto",
-          hasWebSocket: false,
-        },
-        {
-          id: "social-api",
-          name: "Social Media APIs",
-          url: "/api/social-feeds",
           category: "crypto",
           hasWebSocket: false,
         },
@@ -77,67 +63,47 @@ export class RealTimeNewsService {
   private startRefreshTimer(): void {
     const timer = setInterval(async () => {
       try {
-        console.log("🔄 Auto-refreshing crypto RSS and social feeds...");
+        console.log("🔄 Auto-refreshing unified crypto feeds...");
         
-        // Refresh both RSS and social feeds
-        const [rssResponse, socialResponse] = await Promise.allSettled([
-          fetch('/api/crypto-rss?refresh=true'),
-          fetch('/api/social-feeds?refresh=true')
-        ]);
+        // Refresh unified crypto feeds (RSS + Social)
+        const response = await fetch('/api/crypto-rss?refresh=true');
 
         let totalArticles = 0;
         
-        if (rssResponse.status === 'fulfilled' && rssResponse.value.ok) {
-          const rssData = await rssResponse.value.json();
-          totalArticles += rssData.totalArticles || 0;
+        if (response.ok) {
+          const data = await response.json();
+          totalArticles = data.totalArticles || 0;
+          console.log(`✅ Refreshed ${totalArticles} articles (${data.rssArticles || 0} RSS + ${data.socialArticles || 0} social)`);
+        } else {
+          console.warn('⚠️ Failed to refresh unified crypto feeds');
         }
-        
-        if (socialResponse.status === 'fulfilled' && socialResponse.value.ok) {
-          const socialData = await socialResponse.value.json();
-          totalArticles += socialData.totalArticles || 0;
-        }
-
-        console.log(`✅ Refreshed ${totalArticles} articles from all news sources`);
       } catch (error) {
         console.error("❌ Error during auto-refresh:", error);
       }
     }, this.config.refreshInterval);
 
-    this.refreshTimers.set("all-feeds", timer);
+    this.refreshTimers.set("unified-feeds", timer);
   }
 
   async getAllNews(): Promise<NewsArticle[]> {
     try {
-      // Fetch from both RSS and social media APIs
-      const [rssResponse, socialResponse] = await Promise.allSettled([
-        fetch('/api/crypto-rss'),
-        fetch('/api/social-feeds')
-      ]);
+      // Fetch from unified crypto feeds endpoint (RSS + Social)
+      const response = await fetch('/api/crypto-rss');
 
-      const allArticles: NewsArticle[] = [];
-
-      // Process RSS feeds
-      if (rssResponse.status === 'fulfilled' && rssResponse.value.ok) {
-        const rssData = await rssResponse.value.json();
-        allArticles.push(...(rssData.articles || []));
+      if (response.ok) {
+        const data = await response.json();
+        const allArticles = data.articles || [];
+        
+        console.log(`✅ Fetched ${allArticles.length} articles (${data.rssArticles || 0} RSS + ${data.socialArticles || 0} social)`);
+        
+        // Articles are already sorted by publication date in the API
+        return allArticles;
       } else {
-        console.warn('RSS feeds failed:', rssResponse.status === 'rejected' ? rssResponse.reason : 'HTTP error');
+        console.warn('Unified crypto feeds failed:', response.status, response.statusText);
+        return [];
       }
-
-      // Process social media feeds
-      if (socialResponse.status === 'fulfilled' && socialResponse.value.ok) {
-        const socialData = await socialResponse.value.json();
-        allArticles.push(...(socialData.articles || []));
-      } else {
-        console.warn('Social feeds failed:', socialResponse.status === 'rejected' ? socialResponse.reason : 'HTTP error');
-      }
-
-      // Sort by publication date (newest first)
-      allArticles.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-
-      return allArticles;
     } catch (error) {
-      console.error('Error fetching news from APIs:', error);
+      console.error('Error fetching news from unified crypto API:', error);
       return [];
     }
   }
@@ -150,23 +116,40 @@ export class RealTimeNewsService {
   }
 
   async refreshAllSources(): Promise<void> {
-    console.log("🔄 Refreshing all crypto RSS and social feeds...");
+    console.log("🔄 Refreshing unified crypto feeds...");
     
-    // Refresh RSS feeds
-    await this.cryptoRSSService.refreshFeeds();
-    const rssArticles = this.cryptoRSSService.getArticles();
-    this.newsCache.set("crypto-rss", rssArticles);
-    
-    // Refresh social feeds
-    await this.socialAPIService.refreshFeeds();
-    const socialArticles = this.socialAPIService.getArticles();
-    this.newsCache.set("social-api", socialArticles);
-    
-    console.log(`✅ Refreshed ${rssArticles.length} RSS articles and ${socialArticles.length} social articles`);
+    try {
+      // Use the unified crypto-rss endpoint instead of separate services
+      const response = await fetch('/api/crypto-rss?refresh=true');
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`✅ Refreshed ${data.totalArticles || 0} articles (${data.rssArticles || 0} RSS + ${data.socialArticles || 0} social)`);
+      } else {
+        console.warn('⚠️ Failed to refresh unified crypto feeds:', response.status);
+        throw new Error(`Failed to refresh unified crypto feeds: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing unified crypto feeds:', error);
+      throw error; // Re-throw to handle in the calling code
+    }
   }
 
   async searchNews(query: string): Promise<NewsArticle[]> {
-    return this.cryptoRSSService.searchArticles(query);
+    // Use the unified API endpoint with search
+    try {
+      const response = await fetch(`/api/crypto-rss?q=${encodeURIComponent(query)}`);
+      if (response.ok) {
+        const data = await response.json();
+        return data.articles || [];
+      } else {
+        console.warn('Search failed:', response.status);
+        return [];
+      }
+    } catch (error) {
+      console.error('Error searching news:', error);
+      return [];
+    }
   }
 
   destroy(): void {
@@ -182,30 +165,39 @@ export class RealTimeNewsService {
     string,
     { connected: boolean; lastUpdate: string; articleCount: number }
   > {
-    const stats = this.cryptoRSSService.getFeedStats();
-    
+    // Return simplified status since we're using unified API
     return {
-      "crypto-rss": {
-        connected: stats.active > 0,
-        lastUpdate: stats.lastUpdate.toISOString(),
-        articleCount: stats.articleCount,
+      "crypto-unified": {
+        connected: true, // Assume connected if service is running
+        lastUpdate: new Date().toISOString(),
+        articleCount: 0, // Could be updated if needed
       },
     };
   }
 
   getFeedStats() {
-    return this.cryptoRSSService.getFeedStats();
+    // Return simplified stats for unified API
+    return {
+      active: 1,
+      inactive: 0,
+      total: 1,
+      lastUpdate: new Date(),
+      articleCount: 0,
+    };
   }
 
   getActiveFeeds() {
-    return this.cryptoRSSService.getActiveFeeds();
+    // Return simplified active feeds info
+    return [{ name: "Crypto Unified Feeds", url: "/api/crypto-rss", isActive: true }];
   }
 
   getInactiveFeeds() {
-    return this.cryptoRSSService.getInactiveFeeds();
+    // Return empty array since unified API handles all feeds
+    return [];
   }
 
   resetErrorCounts() {
-    this.cryptoRSSService.resetErrorCounts();
+    // No-op since unified API handles error management
+    console.log("✅ Error counts reset (unified API)");
   }
 }

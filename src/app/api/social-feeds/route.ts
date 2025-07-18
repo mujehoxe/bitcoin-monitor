@@ -3,15 +3,22 @@ import { SocialAPIService } from "@/services/socialAPIService";
 
 // Initialize social API service once
 let socialServiceInitialized = false;
+let socialServiceInstance: SocialAPIService | null = null;
+
 async function initializeSocialService(): Promise<SocialAPIService> {
-  const socialService = SocialAPIService.getInstance();
-  
-  if (!socialServiceInitialized) {
-    // Initialize the service (it will set up its own feeds)
-    socialServiceInitialized = true;
+  if (!socialServiceInstance) {
+    console.log('🔄 Creating new social API service instance...');
+    socialServiceInstance = SocialAPIService.getInstance();
+    
+    if (!socialServiceInitialized) {
+      console.log('🔄 Initializing social API service...');
+      await socialServiceInstance.fetchAllFeeds();
+      socialServiceInitialized = true;
+      console.log('✅ Social API service initialized');
+    }
   }
   
-  return socialService;
+  return socialServiceInstance;
 }
 
 export async function GET(request: NextRequest) {
@@ -19,23 +26,27 @@ export async function GET(request: NextRequest) {
   const query = searchParams.get("q");
   const refresh = searchParams.get("refresh") === "true";
 
+  console.log('⚠️ DEPRECATED: /api/social-feeds is deprecated. Use /api/crypto-rss instead which includes both RSS and social feeds.');
+
   try {
     const socialService = await initializeSocialService();
     
     if (refresh) {
+      console.log('🔄 Refreshing social feeds...');
       await socialService.refreshFeeds();
+      console.log('✅ Social feeds refreshed');
     }
     
-    let articles;
+    let articles = socialService.getArticles();
+    
     if (query) {
-      // For now, just return all articles (search functionality can be added later)
-      articles = socialService.getArticles().filter(article => 
+      articles = articles.filter(article => 
         article.title.toLowerCase().includes(query.toLowerCase()) ||
         article.description.toLowerCase().includes(query.toLowerCase())
       );
-    } else {
-      articles = socialService.getArticles();
     }
+
+    console.log(`📊 Returning ${articles.length} social articles`);
 
     return Response.json({
       articles,

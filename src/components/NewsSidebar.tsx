@@ -5,7 +5,7 @@ import { ChevronRight, RefreshCw } from "lucide-react";
 import React, { useState } from "react";
 
 const NewsSidebar: React.FC = () => {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
 
   const { news, isLoading, error, refreshNews } = useRealTimeNews();
@@ -44,6 +44,15 @@ const NewsSidebar: React.FC = () => {
       return news;
     }
     return news.filter((article) => article.category === selectedCategory);
+  };
+
+  const formatEngagementCount = (count: number) => {
+    if (count >= 1000000) {
+      return (count / 1000000).toFixed(1) + "M";
+    } else if (count >= 1000) {
+      return (count / 1000).toFixed(1) + "k";
+    }
+    return count.toString();
   };
 
   const truncateText = (text: string, maxLength: number) => {
@@ -91,8 +100,8 @@ const NewsSidebar: React.FC = () => {
         className={`fixed ${
           isCollapsed
             ? "left-0"
-            : "left-full md:left-96 lg:left-[calc(50%+1rem)]"
-        } top-1/2 -translate-y-1/2 z-50 w-4 h-20 bg-gray-700 hover:bg-gray-600 text-white rounded-r-md transition-all duration-300 flex items-center justify-center text-xs shadow-lg`}
+            : "left-full rounded-none lg:left-[calc(50%+theme(spacing.4))] lg:rounded-r-md"
+        } top-1/2 z-50 w-4 h-screen lg:h-24 lg:rounded-r-md bg-gray-700 hover:bg-gray-600 text-white transition-all duration-300 flex items-center justify-center text-xs shadow-lg`}
         style={{
           transform: isCollapsed
             ? "translateY(-50%)"
@@ -110,7 +119,7 @@ const NewsSidebar: React.FC = () => {
       {/* Main Sidebar - Responsive layout */}
       <div
         className={`fixed left-0 top-0 h-screen transition-all duration-300 ${
-          isCollapsed ? "w-0" : "w-full md:w-96 lg:w-[50%]"
+          isCollapsed ? "w-0" : "w-[calc(100%-theme(spacing.4))] lg:w-[50%]"
         } bg-gray-900/95 backdrop-blur-md border-r border-gray-700/50 z-40 overflow-hidden`}
       >
         {!isCollapsed && (
@@ -196,6 +205,106 @@ const NewsSidebar: React.FC = () => {
                       <p className="text-gray-400 text-xs leading-relaxed mb-2">
                         {truncateText(article.description, 120)}
                       </p>
+
+                      {/* Engagement Metrics for Social Media Posts */}
+                      {article.engagementMetrics && (
+                        <div className="flex items-center gap-3 mb-2 text-xs text-gray-500">
+                          {(article.engagementMetrics.viewCount ?? 0) > 0 && (
+                            <div className="flex items-center gap-1">
+                              <svg
+                                className="w-3 h-3"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                <path
+                                  fillRule="evenodd"
+                                  d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              <span>
+                                {formatEngagementCount(
+                                  article.engagementMetrics.viewCount ?? 0
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {(article.engagementMetrics.likeCount ?? 0) > 0 && (
+                            <div className="flex items-center gap-1">
+                              <svg
+                                className="w-3 h-3"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M2 10.5a1.5 1.5 0 113 0v6a1.5 1.5 0 01-3 0v-6zM6 10.333v5.43a2 2 0 001.106 1.79l.05.025A4 4 0 008.943 18h5.416a2 2 0 001.962-1.608l1.2-6A2 2 0 0015.56 8H12V4a2 2 0 00-2-2 1 1 0 00-1 1v.667a4 4 0 01-.8 2.4L6.8 7.933a4 4 0 00-.8 2.4z" />
+                              </svg>
+                              <span>
+                                {formatEngagementCount(
+                                  article.engagementMetrics.likeCount ?? 0
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {(article.engagementMetrics.commentCount ?? 0) >
+                            0 && (
+                            <div className="flex items-center gap-1">
+                              <svg
+                                className="w-3 h-3"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              <span>
+                                {formatEngagementCount(
+                                  article.engagementMetrics.commentCount ?? 0
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {(article.engagementMetrics.shareCount ?? 0) > 0 && (
+                            <div className="flex items-center gap-1">
+                              <svg
+                                className="w-3 h-3"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z" />
+                              </svg>
+                              <span>
+                                {formatEngagementCount(
+                                  article.engagementMetrics.shareCount ?? 0
+                                )}
+                              </span>
+                            </div>
+                          )}
+                          {(article.engagementMetrics.quoteCount ?? 0) > 0 && (
+                            <div className="flex items-center gap-1">
+                              <svg
+                                className="w-3 h-3"
+                                fill="currentColor"
+                                viewBox="0 0 20 20"
+                              >
+                                <path
+                                  fillRule="evenodd"
+                                  d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                                  clipRule="evenodd"
+                                />
+                              </svg>
+                              <span>
+                                {formatEngagementCount(
+                                  article.engagementMetrics.quoteCount ?? 0
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-2">

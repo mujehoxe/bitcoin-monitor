@@ -213,10 +213,28 @@ export class CryptoRSSService {
       
       return items.map((item, index) => {
         const title = this.extractXMLContent(item, 'title') || 'No title';
-        const description = this.extractXMLContent(item, 'description') || 
-                           this.extractXMLContent(item, 'content:encoded') || 
-                           this.extractXMLContent(item, 'content') ||
-                           'No description';
+        
+        // Try multiple ways to extract description
+        let description = this.extractXMLContent(item, 'description') || 
+                         this.extractXMLContent(item, 'content:encoded') || 
+                         this.extractXMLContent(item, 'content') ||
+                         this.extractXMLContent(item, 'summary') ||
+                         this.extractXMLContent(item, 'excerpt') ||
+                         '';
+        
+        // If description is still empty or too short, try to extract from title
+        if (!description || description.length < 10) {
+          description = title;
+        }
+        
+        // Clean up description and remove HTML
+        description = this.cleanText(description);
+        
+        // If description is still empty, provide a default
+        if (!description || description.length < 5) {
+          description = 'No description available';
+        }
+        
         const link = this.extractXMLContent(item, 'link') || 
                     this.extractXMLContent(item, 'guid') || '';
         
@@ -237,8 +255,8 @@ export class CryptoRSSService {
         return {
           id: `${feed.name}-${Date.now()}-${index}`,
           title: this.cleanText(title),
-          description: this.cleanText(description),
-          content: this.cleanText(description),
+          description: description,
+          content: description,
           publishedAt: this.parseDate(pubDate),
           source: feed.name,
           url: link,
@@ -335,7 +353,19 @@ export class CryptoRSSService {
   private extractXMLContent(xmlText: string, tagName: string): string | null {
     const regex = new RegExp(`<${tagName}[^>]*>([\\s\\S]*?)<\\/${tagName}>`, 'i');
     const match = xmlText.match(regex);
-    return match ? match[1].trim() : null;
+    
+    if (!match) return null;
+    
+    let content = match[1].trim();
+    
+    // Handle CDATA sections
+    const cdataRegex = /^<!\[CDATA\[([\s\S]*?)\]\]>$/;
+    const cdataMatch = content.match(cdataRegex);
+    if (cdataMatch) {
+      content = cdataMatch[1];
+    }
+    
+    return content;
   }
 
   private cleanText(text: string): string {

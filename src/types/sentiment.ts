@@ -9,6 +9,14 @@ export interface NewsArticle {
   author?: string;
   urlToImage?: string;
   category?: string; // news, blog, magazine, social, analysis, market, tech
+  // Social media engagement metrics
+  engagementMetrics?: {
+    viewCount?: number;
+    likeCount?: number;
+    commentCount?: number;
+    shareCount?: number;
+    quoteCount?: number;
+  };
 }
 
 export interface SentimentScore {
