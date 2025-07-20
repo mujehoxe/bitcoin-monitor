@@ -1,5 +1,8 @@
 import { useCallback, useState } from "react";
-import { CandlestickData, CryptoAPIService } from "../services/cryptoAPIService";
+import {
+  CandlestickData,
+  CryptoAPIService,
+} from "../services/cryptoAPIService";
 import { ChartUtils } from "../utils/chartUtils";
 
 interface UseHistoricalDataReturn {
@@ -10,8 +13,8 @@ interface UseHistoricalDataReturn {
   earliestTimestamp: number | null;
   hasMoreData: boolean;
   currentDataSource: string;
-  fetchInitialData: () => Promise<void>;
-  loadMoreHistoricalData: () => Promise<void>;
+  fetchInitialData: (symbol?: string) => Promise<void>;
+  loadMoreHistoricalData: (symbol?: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -20,12 +23,18 @@ export const useHistoricalData = (): UseHistoricalDataReturn => {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [earliestTimestamp, setEarliestTimestamp] = useState<number | null>(null);
+  const [earliestTimestamp, setEarliestTimestamp] = useState<number | null>(
+    null
+  );
   const [hasMoreData, setHasMoreData] = useState(true);
   const [currentDataSource, setCurrentDataSource] = useState<string>("Unknown");
 
   const fetchHistoricalData = useCallback(
-    async (endTime?: number, isLoadingMore = false) => {
+    async (
+      symbol: string = "BTCUSDT",
+      endTime?: number,
+      isLoadingMore = false
+    ) => {
       try {
         if (isLoadingMore) {
           setIsLoadingMore(true);
@@ -34,11 +43,13 @@ export const useHistoricalData = (): UseHistoricalDataReturn => {
         }
 
         console.log(
-          "Fetching historical data...",
+          "Fetching historical data for",
+          symbol,
           endTime ? `before ${endTime}` : "latest"
         );
 
-        const { data: klines, source } = await CryptoAPIService.fetchHistoricalData(endTime);
+        const { data: klines, source } =
+          await CryptoAPIService.fetchHistoricalData(symbol, endTime);
         setCurrentDataSource(source);
 
         if (klines.length > 0) {
@@ -91,32 +102,40 @@ export const useHistoricalData = (): UseHistoricalDataReturn => {
     []
   );
 
-  const fetchInitialData = useCallback(async () => {
-    await fetchHistoricalData();
-  }, [fetchHistoricalData]);
+  const fetchInitialData = useCallback(
+    async (symbol: string = "BTCUSDT") => {
+      await fetchHistoricalData(symbol);
+    },
+    [fetchHistoricalData]
+  );
 
-  const loadMoreHistoricalData = useCallback(async () => {
-    if (isLoadingMore || !earliestTimestamp || !hasMoreData) {
-      console.log("Skip loading more data:", {
-        isLoadingMore,
-        earliestTimestamp,
-        hasMoreData,
-      });
-      return;
-    }
+  const loadMoreHistoricalData = useCallback(
+    async (symbol: string = "BTCUSDT") => {
+      if (isLoadingMore || !earliestTimestamp || !hasMoreData) {
+        console.log("Skip loading more data:", {
+          isLoadingMore,
+          earliestTimestamp,
+          hasMoreData,
+        });
+        return;
+      }
 
-    try {
-      console.log(
-        "Loading more historical data before timestamp:",
-        earliestTimestamp
-      );
-      await fetchHistoricalData(earliestTimestamp, true);
-    } catch (error) {
-      console.error("Error in loadMoreHistoricalData:", error);
-      setError("Failed to load more historical data");
-      setIsLoadingMore(false);
-    }
-  }, [isLoadingMore, earliestTimestamp, hasMoreData, fetchHistoricalData]);
+      try {
+        console.log(
+          "Loading more historical data for",
+          symbol,
+          "before timestamp:",
+          earliestTimestamp
+        );
+        await fetchHistoricalData(symbol, earliestTimestamp, true);
+      } catch (error) {
+        console.error("Error in loadMoreHistoricalData:", error);
+        setError("Failed to load more historical data");
+        setIsLoadingMore(false);
+      }
+    },
+    [isLoadingMore, earliestTimestamp, hasMoreData, fetchHistoricalData]
+  );
 
   const reset = useCallback(() => {
     setData([]);

@@ -1,14 +1,14 @@
-import { useCallback, useRef, useState, useEffect } from "react";
 import {
+  CandlestickSeries,
+  ColorType,
   createChart,
   IChartApi,
   ISeriesApi,
-  CandlestickSeries,
   LineSeries,
-  ColorType,
 } from "lightweight-charts";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CandlestickData } from "../services/cryptoAPIService";
-import { ChartUtils, CHART_CONFIG } from "../utils/chartUtils";
+import { CHART_CONFIG, ChartUtils } from "../utils/chartUtils";
 
 interface UseChartReturn {
   chartContainerRef: React.RefObject<HTMLDivElement | null>;
@@ -37,7 +37,9 @@ export const useChart = (): UseChartReturn => {
       isDisposedRef.current ||
       chartRef.current
     ) {
-      console.log("Chart initialization skipped - container not ready or already exists");
+      console.log(
+        "Chart initialization skipped - container not ready or already exists"
+      );
       return;
     }
 
@@ -60,9 +62,9 @@ export const useChart = (): UseChartReturn => {
       const chart = createChart(container, {
         layout: {
           textColor: CHART_CONFIG.layout.textColor,
-          background: { 
-            type: ColorType.Solid, 
-            color: CHART_CONFIG.layout.background.color 
+          background: {
+            type: ColorType.Solid,
+            color: CHART_CONFIG.layout.background.color,
           },
         },
         width: container.clientWidth,
@@ -73,12 +75,24 @@ export const useChart = (): UseChartReturn => {
       });
 
       // Add candlestick series
-      const candlestickSeries = chart.addSeries(CandlestickSeries, CHART_CONFIG.candlestickSeries);
+      const candlestickSeries = chart.addSeries(
+        CandlestickSeries,
+        CHART_CONFIG.candlestickSeries
+      );
 
       // Add moving average series
-      const ma7Series = chart.addSeries(LineSeries, CHART_CONFIG.movingAverages.ma7);
-      const ma25Series = chart.addSeries(LineSeries, CHART_CONFIG.movingAverages.ma25);
-      const ma99Series = chart.addSeries(LineSeries, CHART_CONFIG.movingAverages.ma99);
+      const ma7Series = chart.addSeries(
+        LineSeries,
+        CHART_CONFIG.movingAverages.ma7
+      );
+      const ma25Series = chart.addSeries(
+        LineSeries,
+        CHART_CONFIG.movingAverages.ma25
+      );
+      const ma99Series = chart.addSeries(
+        LineSeries,
+        CHART_CONFIG.movingAverages.ma99
+      );
 
       // Store references
       chartRef.current = chart;
@@ -90,7 +104,12 @@ export const useChart = (): UseChartReturn => {
 
       // Handle resize
       const handleResize = () => {
-        if (isDisposedRef.current || !chartRef.current || !chartContainerRef.current) return;
+        if (
+          isDisposedRef.current ||
+          !chartRef.current ||
+          !chartContainerRef.current
+        )
+          return;
 
         try {
           chartRef.current.applyOptions({
@@ -116,7 +135,11 @@ export const useChart = (): UseChartReturn => {
   }, []);
 
   const updateChartData = useCallback((data: CandlestickData[]) => {
-    if (!chartRef.current || !candlestickSeriesRef.current || isDisposedRef.current) {
+    if (
+      !chartRef.current ||
+      !candlestickSeriesRef.current ||
+      isDisposedRef.current
+    ) {
       return;
     }
 
@@ -162,13 +185,16 @@ export const useChart = (): UseChartReturn => {
     }
   }, []);
 
-  const setVisibleTimeRangeChangeCallback = useCallback((callback: () => void) => {
-    if (!chartRef.current || isDisposedRef.current) {
-      return;
-    }
+  const setVisibleTimeRangeChangeCallback = useCallback(
+    (callback: () => void) => {
+      if (!chartRef.current || isDisposedRef.current) {
+        return;
+      }
 
-    chartRef.current.timeScale().subscribeVisibleTimeRangeChange(callback);
-  }, []);
+      chartRef.current.timeScale().subscribeVisibleTimeRangeChange(callback);
+    },
+    []
+  );
 
   const dispose = useCallback(() => {
     console.log("Disposing chart...");

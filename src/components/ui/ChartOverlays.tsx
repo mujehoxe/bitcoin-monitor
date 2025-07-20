@@ -34,7 +34,9 @@ interface LoadingIndicatorProps {
   hasMoreData: boolean;
 }
 
-export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({ hasMoreData }) => {
+export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
+  hasMoreData,
+}) => {
   if (hasMoreData) return null;
 
   return (

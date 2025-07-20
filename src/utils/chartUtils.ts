@@ -34,8 +34,8 @@ export class ChartUtils {
   // Sort and deduplicate candlestick data
   static sortAndDeduplicateData(data: CandlestickData[]): CandlestickData[] {
     const uniqueData = new Map<number, CandlestickData>();
-    
-    data.forEach(item => {
+
+    data.forEach((item) => {
       const timestamp = item.time as number;
       uniqueData.set(timestamp, item);
     });
@@ -50,10 +50,8 @@ export class ChartUtils {
     newData: CandlestickData[],
     existingData: CandlestickData[]
   ): CandlestickData[] {
-    const existingTimestamps = new Set(
-      existingData.map((item) => item.time)
-    );
-    
+    const existingTimestamps = new Set(existingData.map((item) => item.time));
+
     const filteredNewData = newData.filter(
       (item) => !existingTimestamps.has(item.time)
     );
@@ -70,8 +68,7 @@ export class ChartUtils {
     const uniqueTimestamps = new Set(timestamps);
     const isSorted = data.every(
       (item, index) =>
-        index === 0 ||
-        (item.time as number) > (data[index - 1].time as number)
+        index === 0 || (item.time as number) > (data[index - 1].time as number)
     );
 
     return isSorted && timestamps.length === uniqueTimestamps.size;

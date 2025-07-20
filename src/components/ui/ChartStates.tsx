@@ -4,8 +4,8 @@ interface LoadingStateProps {
   message?: string;
 }
 
-export const LoadingState: React.FC<LoadingStateProps> = ({ 
-  message = "Loading Bitcoin data..." 
+export const LoadingState: React.FC<LoadingStateProps> = ({
+  message = "Loading Bitcoin data...",
 }) => {
   return (
     <div className="w-full mx-auto p-2">

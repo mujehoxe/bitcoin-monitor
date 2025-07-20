@@ -30,36 +30,6 @@ export const useRealTimeNews = (): UseRealTimeNewsResult => {
   // Memoize the service instance
   const newsService = useMemo(() => RealTimeNewsService.getInstance(), []);
 
-  // Initialize the service and start fetching news
-  const initializeNews = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      console.log("🔄 Initializing real-time news service...");
-
-      // Initialize real-time feeds
-      await newsService.initialize();
-
-      // Get initial news
-      const initialNews = await newsService.getAllNews();
-      console.log("📰 Initial news loaded:", initialNews.length, "articles");
-      setNews(initialNews);
-
-      // Get source status
-      const status = newsService.getSourceStatus();
-      console.log("📊 Source status:", status);
-      setSourceStatus(status);
-    } catch (err) {
-      console.error("❌ Error initializing news service:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to initialize news service"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, [newsService]);
-
   // Refresh news manually
   const refreshNews = useCallback(async () => {
     try {
@@ -141,13 +111,59 @@ export const useRealTimeNews = (): UseRealTimeNewsResult => {
 
   // Initialize on mount
   useEffect(() => {
-    initializeNews();
+    let mounted = true;
+
+    const initialize = async () => {
+      if (!mounted) return;
+
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Initialize real-time feeds
+        await newsService.initialize();
+
+        if (!mounted) return;
+
+        // Get initial news
+        const initialNews = await newsService.getAllNews();
+        console.log("📰 Initial news loaded:", initialNews.length, "articles");
+
+        if (mounted) {
+          setNews(initialNews);
+        }
+
+        // Get source status
+        const status = newsService.getSourceStatus();
+        console.log("📊 Source status:", status);
+
+        if (mounted) {
+          setSourceStatus(status);
+        }
+      } catch (err) {
+        console.error("❌ Error initializing news service:", err);
+        if (mounted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to initialize news service"
+          );
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initialize();
 
     // Cleanup on unmount
     return () => {
+      mounted = false;
       newsService.destroy();
     };
-  }, [initializeNews, newsService]);
+  }, [newsService]); // Only depend on memoized newsService
 
   return {
     news,

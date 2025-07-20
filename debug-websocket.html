@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Debug WebSocket Connection</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .log {
+        height: 400px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        background: #f8f9fa;
+        font-family: monospace;
+        font-size: 12px;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        background: #007bff;
+        color: white;
+      }
+      .success {
+        color: green;
+      }
+      .error {
+        color: red;
+      }
+      .info {
+        color: blue;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔍 Debug WebSocket Connection Issues</h1>
+
+    <div>
+      <button onclick="testSingleSymbol()">Test Single Symbol (BTCUSDT)</button>
+      <button onclick="testMultipleSymbols()">Test Multiple Symbols</button>
+      <button onclick="testInvalidSymbol()">Test Invalid Symbol</button>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <h3>Debug Log:</h3>
+    <div id="log" class="log"></div>
+
+    <script>
+      function log(message, type = "info") {
+        const logDiv = document.getElementById("log");
+        const timestamp = new Date().toLocaleTimeString();
+        const className =
+          type === "error" ? "error" : type === "success" ? "success" : "info";
+        logDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      function clearLog() {
+        document.getElementById("log").innerHTML = "";
+      }
+
+      function testConnection(symbols, testName) {
+        log(`🧪 Starting ${testName}...`);
+        log(`📊 Symbols: ${symbols.join(", ")}`);
+
+        // Validate symbols
+        const validSymbols = symbols.filter(
+          (s) => s && typeof s === "string" && s.length > 0
+        );
+        if (validSymbols.length === 0) {
+          log("❌ No valid symbols provided", "error");
+          return;
+        }
+
+        const streams = validSymbols
+          .map((s) => `${s.toLowerCase()}@miniTicker`)
+          .join("/");
+        const url = `wss://stream.binance.com:9443/ws/${streams}`;
+
+        log(`🔗 WebSocket URL: ${url}`);
+        log(`📡 Attempting connection...`);
+
+        const ws = new WebSocket(url);
+        let messageCount = 0;
+        let startTime = Date.now();
+
+        const timeout = setTimeout(() => {
+          if (ws.readyState !== WebSocket.OPEN) {
+            log("⏰ Connection timeout (10s)", "error");
+            ws.close();
+          }
+        }, 10000);
+
+        ws.onopen = () => {
+          clearTimeout(timeout);
+          const connectTime = Date.now() - startTime;
+          log(`✅ Connected successfully in ${connectTime}ms`, "success");
+          log(`📊 Ready State: ${ws.readyState} (OPEN)`);
+
+          // Test ping
+          ws.send(JSON.stringify({ method: "ping" }));
+          log("🏓 Sent ping message");
+        };
+
+        ws.onmessage = (event) => {
+          messageCount++;
+          try {
+            const data = JSON.parse(event.data);
+
+            if (data.result === "pong") {
+              log("🏓 Received pong response", "success");
+            } else if (data.e === "24hrMiniTicker") {
+              const symbol = data.s;
+              const price = parseFloat(data.c);
+              log(`💰 ${symbol}: $${price}`, "success");
+
+              // Close after receiving a few messages
+              if (messageCount >= 3) {
+                log(
+                  "✅ Test completed successfully - closing connection",
+                  "success"
+                );
+                ws.close(1000, "Test completed");
+              }
+            } else {
+              log(`📨 Unknown message type: ${data.e || "undefined"}`);
+            }
+          } catch (err) {
+            log(`❌ Failed to parse message: ${err.message}`, "error");
+          }
+        };
+
+        ws.onerror = (error) => {
+          clearTimeout(timeout);
+          log(`❌ WebSocket Error Details:`, "error");
+          log(`   - Type: ${error.type}`, "error");
+          log(`   - Ready State: ${ws.readyState}`, "error");
+          log(`   - URL: ${url}`, "error");
+          log(`   - Error Object: ${JSON.stringify(error, null, 2)}`, "error");
+          log(`   - Navigator Online: ${navigator.onLine}`, "error");
+
+          // Additional debugging
+          if (ws.readyState === WebSocket.CONNECTING) {
+            log("   - Status: Still connecting when error occurred", "error");
+          } else if (ws.readyState === WebSocket.CLOSED) {
+            log("   - Status: Connection was closed", "error");
+          }
+        };
+
+        ws.onclose = (event) => {
+          clearTimeout(timeout);
+          log(`🔌 Connection Closed:`, "info");
+          log(`   - Code: ${event.code}`, "info");
+          log(`   - Reason: ${event.reason || "No reason provided"}`, "info");
+          log(`   - Was Clean: ${event.wasClean}`, "info");
+          log(`   - Messages Received: ${messageCount}`, "info");
+
+          // Interpret close codes
+          const closeReasons = {
+            1000: "Normal closure",
+            1001: "Going away",
+            1002: "Protocol error",
+            1003: "Unsupported data",
+            1006: "Abnormal closure (no close frame)",
+            1011: "Server error",
+            1012: "Service restart",
+          };
+
+          const reason = closeReasons[event.code] || "Unknown reason";
+          log(`   - Interpretation: ${reason}`, "info");
+
+          if (event.code === 1006) {
+            log(
+              "⚠️ Code 1006 usually indicates network issues or blocked connections",
+              "error"
+            );
+          }
+        };
+      }
+
+      function testSingleSymbol() {
+        testConnection(["BTCUSDT"], "Single Symbol Test");
+      }
+
+      function testMultipleSymbols() {
+        testConnection(
+          ["BTCUSDT", "ETHUSDT", "ADAUSDT"],
+          "Multiple Symbols Test"
+        );
+      }
+
+      function testInvalidSymbol() {
+        testConnection(["INVALIDUSDT"], "Invalid Symbol Test");
+      }
+
+      // Initial log
+      log("🚀 WebSocket Debug Tool Ready");
+      log(`🌐 Navigator Online: ${navigator.onLine}`);
+      log("👆 Click a test button to diagnose connection issues");
+    </script>
+  </body>
+</html>

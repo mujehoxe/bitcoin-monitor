@@ -93,15 +93,15 @@ const NewsSidebar: React.FC = () => {
   };
 
   return (
-    <>
+    <div className="h-screen">
       {/* Vertical Toggle Button - Responsive positioning */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
         className={`fixed ${
           isCollapsed
             ? "left-0"
-            : "left-full rounded-none lg:left-[calc(50%+theme(spacing.4))] lg:rounded-r-md"
-        } top-1/2 z-50 w-4 h-screen lg:h-24 lg:rounded-r-md bg-gray-700 hover:bg-gray-600 text-white transition-all duration-300 flex items-center justify-center text-xs shadow-lg`}
+            : "left-full rounded-none lg:left-[calc(50%+theme(spacing.4))]"
+        } top-1/2 z-50 w-4 h-screen lg:rounded-r-md bg-gray-700 hover:bg-gray-600 text-white transition-all duration-300 flex items-center justify-center text-xs shadow-lg`}
         style={{
           transform: isCollapsed
             ? "translateY(-50%)"
@@ -335,7 +335,7 @@ const NewsSidebar: React.FC = () => {
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 };
 

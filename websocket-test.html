@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Connection Test</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .status {
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+      }
+      .connected {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .disconnected {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      .info {
+        background-color: #d1ecf1;
+        color: #0c5460;
+      }
+      .coin-price {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px;
+        border: 1px solid #ddd;
+        margin: 5px 0;
+        border-radius: 3px;
+      }
+      button {
+        padding: 10px 20px;
+        margin: 5px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        background-color: #007bff;
+        color: white;
+      }
+      button:hover {
+        background-color: #0056b3;
+      }
+      #log {
+        height: 300px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 10px;
+        background-color: #f8f9fa;
+        font-family: monospace;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🔗 Binance WebSocket Connection Test</h1>
+
+    <div id="status" class="status disconnected">Status: Disconnected</div>
+
+    <div class="controls">
+      <button onclick="testSingleConnection()">
+        Test Single Connection (BTC)
+      </button>
+      <button onclick="testMultipleConnections()">Test Multiple Coins</button>
+      <button onclick="testConnectionLimit()">Test Connection Limit</button>
+      <button onclick="disconnect()">Disconnect</button>
+      <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="info">
+      <strong>Test Results:</strong>
+      <div id="results"></div>
+    </div>
+
+    <h3>Real-time Price Data:</h3>
+    <div id="prices"></div>
+
+    <h3>Connection Log:</h3>
+    <div id="log"></div>
+
+    <script>
+      let ws = null;
+      let connectionCount = 0;
+      let prices = new Map();
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 3;
+
+      function log(message) {
+        const logDiv = document.getElementById("log");
+        const timestamp = new Date().toLocaleTimeString();
+        logDiv.innerHTML += `[${timestamp}] ${message}\n`;
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      function updateStatus(status, isConnected) {
+        const statusDiv = document.getElementById("status");
+        statusDiv.textContent = `Status: ${status}`;
+        statusDiv.className = `status ${
+          isConnected ? "connected" : "disconnected"
+        }`;
+      }
+
+      function updatePrices() {
+        const pricesDiv = document.getElementById("prices");
+        pricesDiv.innerHTML = "";
+
+        for (const [symbol, data] of prices.entries()) {
+          const priceDiv = document.createElement("div");
+          priceDiv.className = "coin-price";
+          priceDiv.innerHTML = `
+                    <span><strong>${symbol}</strong></span>
+                    <span>$${data.price}</span>
+                    <span style="color: ${data.change >= 0 ? "green" : "red"}">
+                        ${data.change >= 0 ? "+" : ""}${data.change.toFixed(2)}%
+                    </span>
+                `;
+          pricesDiv.appendChild(priceDiv);
+        }
+      }
+
+      function testSingleConnection() {
+        log("🧪 Testing single connection to BTCUSDT...");
+        disconnect();
+
+        const symbols = ["btcusdt"];
+        const streams = symbols.map((s) => `${s}@miniTicker`).join("/");
+        const url = `wss://stream.binance.com:9443/ws/${streams}`;
+
+        connectToWebSocket(url, symbols);
+      }
+
+      function testMultipleConnections() {
+        log("🧪 Testing multiple coins connection...");
+        disconnect();
+
+        const symbols = ["btcusdt", "ethusdt", "adausdt", "solusdt", "dotusdt"];
+        const streams = symbols.map((s) => `${s}@miniTicker`).join("/");
+        const url = `wss://stream.binance.com:9443/ws/${streams}`;
+
+        connectToWebSocket(url, symbols);
+      }
+
+      function testConnectionLimit() {
+        log("🧪 Testing connection limit with 10 coins...");
+        disconnect();
+
+        const symbols = [
+          "btcusdt",
+          "ethusdt",
+          "adausdt",
+          "solusdt",
+          "dotusdt",
+          "linkusdt",
+          "maticusdt",
+          "atomusdt",
+          "nearusdt",
+          "avaxusdt",
+        ];
+        const streams = symbols.map((s) => `${s}@miniTicker`).join("/");
+        const url = `wss://stream.binance.com:9443/ws/${streams}`;
+
+        connectToWebSocket(url, symbols);
+      }
+
+      function connectToWebSocket(url, symbols) {
+        log(`🔗 Connecting to: ${url}`);
+        updateStatus("Connecting...", false);
+
+        try {
+          ws = new WebSocket(url);
+
+          const connectionTimeout = setTimeout(() => {
+            if (ws.readyState !== WebSocket.OPEN) {
+              log("❌ Connection timeout (10s)");
+              ws.close();
+              updateStatus("Connection Timeout", false);
+            }
+          }, 10000);
+
+          ws.onopen = () => {
+            clearTimeout(connectionTimeout);
+            connectionCount++;
+            reconnectAttempts = 0;
+            log(`✅ Connected successfully (attempt #${connectionCount})`);
+            log(
+              `📊 Subscribed to ${symbols.length} symbols: ${symbols.join(
+                ", "
+              )}`
+            );
+            updateStatus(`Connected to ${symbols.length} streams`, true);
+
+            // Send ping to keep connection alive
+            setInterval(() => {
+              if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ method: "ping" }));
+              }
+            }, 3 * 60 * 1000); // Every 3 minutes
+          };
+
+          ws.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+
+              if (data.result === "pong") {
+                log("🏓 Received pong");
+                return;
+              }
+
+              if (data.e === "24hrMiniTicker") {
+                const symbol = data.s;
+                const price = parseFloat(data.c);
+                const changePercent = parseFloat(data.P);
+
+                prices.set(symbol, {
+                  price: price,
+                  change: changePercent,
+                });
+
+                updatePrices();
+                log(
+                  `📈 ${symbol}: $${price} (${
+                    changePercent >= 0 ? "+" : ""
+                  }${changePercent.toFixed(2)}%)`
+                );
+              }
+            } catch (error) {
+              log(`❌ Error parsing message: ${error.message}`);
+            }
+          };
+
+          ws.onerror = (error) => {
+            log(`❌ WebSocket error: ${error}`);
+            updateStatus("Error", false);
+          };
+
+          ws.onclose = (event) => {
+            log(
+              `🔌 Connection closed: Code ${event.code}, Reason: ${
+                event.reason || "Unknown"
+              }`
+            );
+            updateStatus("Disconnected", false);
+
+            if (!event.wasClean && reconnectAttempts < maxReconnectAttempts) {
+              reconnectAttempts++;
+              const delay = Math.min(
+                1000 * Math.pow(2, reconnectAttempts),
+                10000
+              );
+              log(
+                `🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...`
+              );
+
+              setTimeout(() => {
+                connectToWebSocket(url, symbols);
+              }, delay);
+            } else if (reconnectAttempts >= maxReconnectAttempts) {
+              log(`❌ Max reconnection attempts reached`);
+              updateStatus("Reconnection Failed", false);
+            }
+          };
+        } catch (error) {
+          log(`❌ Failed to create WebSocket: ${error.message}`);
+          updateStatus("Failed to Connect", false);
+        }
+      }
+
+      function disconnect() {
+        if (ws) {
+          log("🔌 Manually disconnecting...");
+          ws.close(1000, "Manual disconnect");
+          ws = null;
+        }
+        prices.clear();
+        updatePrices();
+        updateStatus("Disconnected", false);
+      }
+
+      function clearLog() {
+        document.getElementById("log").innerHTML = "";
+      }
+
+      // Initialize
+      log("🚀 WebSocket Test Tool Ready");
+      log("👆 Click a button above to test different connection scenarios");
+    </script>
+  </body>
+</html>

@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from "react";
 import { Time } from "lightweight-charts";
+import { useCallback, useRef, useState } from "react";
 import { CandlestickData, TickerData } from "../services/cryptoAPIService";
 
 interface UseWebSocketReturn {
   isConnected: boolean;
   tickerData: TickerData | null;
   connect: (
+    symbol: string,
     initialData: CandlestickData[],
     onCandleUpdate: (candle: CandlestickData) => void
   ) => void;
@@ -20,11 +21,12 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
   const connectToBybit = useCallback(
     (
+      symbol: string,
       initialData: CandlestickData[],
       onCandleUpdate: (candle: CandlestickData) => void
     ) => {
       try {
-        console.log("Connecting to Bybit WebSocket...");
+        console.log(`Connecting to Bybit WebSocket for ${symbol}...`);
         const ws = new WebSocket("wss://stream.bybit.com/v5/public/spot");
 
         ws.onopen = () => {
@@ -33,7 +35,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
           const subscriptions = {
             op: "subscribe",
-            args: ["kline.1.BTCUSDT", "tickers.BTCUSDT"],
+            args: [`kline.1.${symbol}`, `tickers.${symbol}`],
           };
           ws.send(JSON.stringify(subscriptions));
         };
@@ -42,7 +44,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
           try {
             const data = JSON.parse(event.data);
 
-            if (data.topic === "kline.1.BTCUSDT" && data.data) {
+            if (data.topic === `kline.1.${symbol}` && data.data) {
               const kline = data.data[0];
               if (kline && !isDisposedRef.current) {
                 const candleData = {
@@ -71,7 +73,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
                   }
                 }
               }
-            } else if (data.topic === "tickers.BTCUSDT" && data.data) {
+            } else if (data.topic === `tickers.${symbol}` && data.data) {
               const ticker = data.data;
               setTickerData({
                 symbol: ticker.symbol,
@@ -105,7 +107,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
               !isDisposedRef.current &&
               wsRef.current?.readyState === WebSocket.CLOSED
             ) {
-              connectToBybit(initialData, onCandleUpdate);
+              connectToBybit(symbol, initialData, onCandleUpdate);
             }
           }, 5000);
         };
@@ -121,13 +123,15 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
   const connectToBinance = useCallback(
     (
+      symbol: string,
       initialData: CandlestickData[],
       onCandleUpdate: (candle: CandlestickData) => void
     ) => {
       try {
-        console.log("Connecting to Binance WebSocket...");
+        console.log(`Connecting to Binance WebSocket for ${symbol}...`);
+        const wsSymbol = symbol.toLowerCase();
         const ws = new WebSocket(
-          "wss://stream.binance.com:9443/ws/btcusdt@kline_1m"
+          `wss://stream.binance.com:9443/ws/${wsSymbol}@kline_1m`
         );
 
         ws.onopen = () => {
@@ -178,7 +182,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
           // Try Bybit as fallback
           setTimeout(() => {
             if (!isDisposedRef.current) {
-              connectToBybit(initialData, onCandleUpdate);
+              connectToBybit(symbol, initialData, onCandleUpdate);
             }
           }, 2000);
         };
@@ -195,7 +199,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
               !isDisposedRef.current &&
               wsRef.current?.readyState === WebSocket.CLOSED
             ) {
-              connectToBinance(initialData, onCandleUpdate);
+              connectToBinance(symbol, initialData, onCandleUpdate);
             }
           }, 5000);
         };
@@ -203,7 +207,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
         wsRef.current = ws;
       } catch (err) {
         console.error("Error connecting to Binance WebSocket:", err);
-        connectToBybit(initialData, onCandleUpdate);
+        connectToBybit(symbol, initialData, onCandleUpdate);
       }
     },
     [connectToBybit]
@@ -211,6 +215,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
 
   const connect = useCallback(
     (
+      symbol: string,
       initialData: CandlestickData[],
       onCandleUpdate: (candle: CandlestickData) => void
     ) => {
@@ -222,7 +227,7 @@ export const useWebSocket = (): UseWebSocketReturn => {
       }
 
       // Start with Binance
-      connectToBinance(initialData, onCandleUpdate);
+      connectToBinance(symbol, initialData, onCandleUpdate);
     },
     [isConnected, connectToBinance]
   );

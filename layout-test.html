@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Layout Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="bg-gray-100">
+    <div class="min-h-screen bg-background flex">
+      <!-- News Sidebar (simulated) -->
+      <div class="w-64 bg-blue-100 border-r border-gray-300">
+        <div class="p-4">
+          <h2 class="font-bold text-blue-900">News Sidebar</h2>
+          <p class="text-blue-700 text-sm">This simulates the news sidebar</p>
+        </div>
+      </div>
+
+      <!-- Main content area -->
+      <main class="flex-1 min-w-0">
+        <!-- Chart + CoinSelector container -->
+        <div class="w-full h-screen flex p-4">
+          <!-- Chart area -->
+          <div class="flex-1 min-w-0 mr-4">
+            <div class="h-full bg-gray-800 border border-gray-600 rounded p-4">
+              <h3 class="text-white text-xl mb-4">📈 Bitcoin Price Chart</h3>
+              <div class="bg-gray-700 h-full rounded p-4">
+                <p class="text-gray-300">Chart would be rendered here</p>
+                <p class="text-gray-400 text-sm mt-2">
+                  This area should take up most of the space
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Coin Selector Panel -->
+          <div
+            class="w-80 h-full bg-red-100 border-4 border-red-500 rounded-lg shadow-lg"
+          >
+            <div class="p-4">
+              <h3 class="text-lg font-semibold mb-4 text-red-900">
+                🔴 COIN SELECTOR TEST
+              </h3>
+              <div
+                class="bg-yellow-200 p-4 rounded border-2 border-yellow-500 mb-4"
+              >
+                <p class="text-yellow-900 font-bold">
+                  ✅ Layout Test Successful!
+                </p>
+                <p class="text-yellow-800 text-sm mt-2">
+                  If you can see this bright yellow box, the layout is working
+                  correctly.
+                </p>
+              </div>
+
+              <!-- Currency Selector -->
+              <div class="bg-white p-3 rounded border mb-4">
+                <h4 class="font-semibold text-sm mb-2">Base Currency</h4>
+                <div class="flex gap-2">
+                  <button
+                    class="px-3 py-1 bg-blue-500 text-white rounded text-xs"
+                  >
+                    USDT
+                  </button>
+                  <button class="px-3 py-1 bg-gray-200 rounded text-xs">
+                    USD
+                  </button>
+                  <button class="px-3 py-1 bg-gray-200 rounded text-xs">
+                    EUR
+                  </button>
+                </div>
+              </div>
+
+              <!-- Hot Coins -->
+              <div class="bg-white p-3 rounded border mb-4">
+                <h4 class="font-semibold text-sm mb-2 flex items-center">
+                  🔥 Hot Coins
+                </h4>
+                <div class="space-y-2">
+                  <div class="p-2 bg-gray-50 rounded border">
+                    <div class="font-semibold text-sm">Bitcoin (BTC)</div>
+                    <div class="text-xs text-gray-600">$65,000 (+2.5%)</div>
+                  </div>
+                  <div class="p-2 bg-gray-50 rounded border">
+                    <div class="font-semibold text-sm">Ethereum (ETH)</div>
+                    <div class="text-xs text-gray-600">$3,200 (+1.8%)</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Stable Coins -->
+              <div class="bg-white p-3 rounded border">
+                <h4 class="font-semibold text-sm mb-2 flex items-center">
+                  📈 Stable Growth
+                </h4>
+                <div class="space-y-2">
+                  <div class="p-2 bg-gray-50 rounded border">
+                    <div class="font-semibold text-sm">Cardano (ADA)</div>
+                    <div class="text-xs text-gray-600">$0.45 (+0.95%)</div>
+                  </div>
+                  <div class="p-2 bg-gray-50 rounded border">
+                    <div class="font-semibold text-sm">Polkadot (DOT)</div>
+                    <div class="text-xs text-gray-600">$7.23 (+1.12%)</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

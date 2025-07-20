@@ -1,5 +1,5 @@
-import BitcoinDashboard from "@/components/BitcoinDashboard";
+import Dashboard from "@/components/Dashboard";
 
 export default function Home() {
-  return <BitcoinDashboard />;
+  return <Dashboard />;
 }
