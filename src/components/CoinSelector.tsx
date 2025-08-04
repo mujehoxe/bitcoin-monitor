@@ -1,5 +1,4 @@
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TrendingCoin } from "@/services/cryptoAPIService";
 import { Loader2, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import React, { useState } from "react";
@@ -54,10 +53,8 @@ const CoinItem: React.FC<{
 }> = ({ coin, isSelected, onSelect }) => {
   return (
     <div
-      className={`p-3 h-full rounded-lg border cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-800 ${
-        isSelected
-          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-          : "border-gray-200 dark:border-gray-700"
+      className={`p-3 h-full border-0 rounded-lg cursor-pointer transition-all hover:bg-gray-50 dark:hover:bg-gray-800 ${
+        isSelected ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20" : ""
       }`}
       onClick={onSelect}
     >
@@ -116,7 +113,7 @@ export const CoinSelector: React.FC<CoinSelectorProps> = ({
 
   // Sort hot coins by 5min acceleration (positive only), then by 24h change
   const sortedHotCoins = [...hotCoins]
-    .filter(coin => (coin.growthRate5min || 0) > 0) // Only positive 5-minute growth
+    .filter((coin) => (coin.growthRate5min || 0) > 0) // Only positive 5-minute growth
     .sort((a, b) => {
       // Primary sort: 5-minute acceleration (higher is better)
       const aGrowth5m = a.growthRate5min || 0;
@@ -148,9 +145,6 @@ export const CoinSelector: React.FC<CoinSelectorProps> = ({
     <div className="space-y-4 h-full">
       {/* Tab Navigation */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm">Coin Selection</CardTitle>
-        </CardHeader>
         <CardContent className="pt-0">
           <div className="flex space-x-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
             <button
@@ -180,18 +174,8 @@ export const CoinSelector: React.FC<CoinSelectorProps> = ({
       {/* Hot Coins Tab */}
       {activeTab === "hot" && (
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-              </CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                Accelerating now (5min+)
-              </Badge>
-            </div>
-          </CardHeader>
           <CardContent className="pt-0">
-            <div className="space-y-2 max-h-80 overflow-y-auto">
+            <div className="space-y-2 max-h-fit overflow-y-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -221,18 +205,8 @@ export const CoinSelector: React.FC<CoinSelectorProps> = ({
       {/* Stable Growth Tab */}
       {activeTab === "stable" && (
         <Card>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                {isLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-              </CardTitle>
-              <Badge variant="secondary" className="text-xs">
-                Updates every 15min
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="space-y-2 max-h-80 overflow-y-auto">
+          <CardContent className="pt-0 border-0">
+            <div className="border-0 space-y-2 max-h-full overflow-y-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin" />
